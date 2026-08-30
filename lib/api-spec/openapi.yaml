@@ -246,6 +246,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EmergencyEvent"
+  /journeys/{id}/complete:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: completeJourney
+      tags: [journeys]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteJourneyRequest"
+      responses:
+        "200":
+          description: Completed journey
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Journey"
 components:
   parameters:
     Id:
@@ -370,31 +390,71 @@ components:
         - routeDistanceMeters
         - routeDurationSeconds
     Journey:
-      allOf:
-        - $ref: "#/components/schemas/CreateJourneyRequest"
-        - type: object
-          properties:
-            id: { type: string }
-            status: { type: string, enum: [PLANNED, ACTIVE, COMPLETED, CANCELLED] }
-            createdAt: { type: string, format: date-time }
-            safety: { $ref: "#/components/schemas/SafetyAnalysis" }
-          required: [id, status, createdAt]
+      type: object
+      properties:
+        id: { type: string }
+        pickup: { type: string }
+        destination: { type: string }
+        pickupPlaceId: { type: string }
+        destinationPlaceId: { type: string }
+        pickupCoordinate: { $ref: "#/components/schemas/Coordinate" }
+        destinationCoordinate: { $ref: "#/components/schemas/Coordinate" }
+        selectedRouteId: { type: string }
+        routeDistanceMeters: { type: number }
+        routeDurationSeconds: { type: number }
+        status: { type: string, enum: [PLANNED, ACTIVE, COMPLETED, CANCELLED] }
+        createdAt: { type: string, format: date-time }
+      required: [id, pickup, destination, pickupCoordinate, destinationCoordinate, routeDistanceMeters, routeDurationSeconds, status, createdAt]
     SafetyAnalysisRequest:
       type: object
       properties:
         routeId: { type: string }
-        routePoints:
+        routeDeviationMeters: { type: number, minimum: 0 }
+        stationarySeconds: { type: number, minimum: 0 }
+        speedMetersPerSecond: { type: number, minimum: 0 }
+        includedContributors:
           type: array
-          items: { $ref: "#/components/schemas/RoutePoint" }
-      required: [routeId, routePoints]
+          items: { type: string }
+        testOverrides:
+          type: object
+          additionalProperties: { type: string }
+      required: [routeId]
     SafetyAnalysis:
       type: object
       properties:
-        status: { type: string, enum: [PENDING, AVAILABLE, UNAVAILABLE] }
-        score: { type: number, nullable: true }
-        riskLevel: { type: string, enum: [UNKNOWN, LOW, MEDIUM, HIGH] }
+        status: { type: string, enum: [AVAILABLE, UNAVAILABLE] }
+        score: { type: number, nullable: true, minimum: 0, maximum: 100 }
+        riskLevel: { type: string, enum: [UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL] }
         message: { type: string }
-      required: [status, riskLevel, message]
+        contributors:
+          type: array
+          items: { $ref: "#/components/schemas/SafetyContributor" }
+        algorithms:
+          type: array
+          items: { type: string }
+        generatedAt: { type: string, format: date-time }
+      required: [status, riskLevel, message, contributors, algorithms, generatedAt]
+    SafetyContributor:
+      type: object
+      properties:
+        id: { type: string }
+        label: { type: string }
+        state: { type: string }
+        impact: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL, NOT_ASSESSED] }
+        penalty: { type: number, minimum: 0, maximum: 1 }
+        included: { type: boolean }
+        assessed: { type: boolean }
+        source: { type: string, enum: [LIVE, TEST, UNAVAILABLE] }
+      required: [id, label, state, impact, penalty, included, assessed, source]
+    CompleteJourneyRequest:
+      type: object
+      properties:
+        finalScore: { type: number, minimum: 0, maximum: 100, nullable: true }
+        finalRiskLevel: { type: string }
+        routeDeviationCount: { type: number, minimum: 0 }
+        stationaryEventCount: { type: number, minimum: 0 }
+        emergencyActive: { type: boolean }
+      required: [finalRiskLevel, routeDeviationCount, stationaryEventCount, emergencyActive]
     LocationPointRequest:
       allOf:
         - $ref: "#/components/schemas/Coordinate"

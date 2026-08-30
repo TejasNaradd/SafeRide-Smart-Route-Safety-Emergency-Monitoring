@@ -8,6 +8,7 @@
 
 export * from './authResponse';
 export * from './badRequestResponse';
+export * from './completeJourneyRequest';
 export * from './contactRequest';
 export * from './coordinate';
 export * from './createJourneyRequest';
@@ -26,8 +27,12 @@ export * from './registerRequest';
 export * from './routePoint';
 export * from './safetyAnalysis';
 export * from './safetyAnalysisRequest';
+export * from './safetyAnalysisRequestTestOverrides';
 export * from './safetyAnalysisRiskLevel';
 export * from './safetyAnalysisStatus';
+export * from './safetyContributor';
+export * from './safetyContributorImpact';
+export * from './safetyContributorSource';
 export * from './unauthorizedResponse';
 export * from './user';
 export * from './vehicle';

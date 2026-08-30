@@ -7,10 +7,18 @@
  */
 import type { SafetyAnalysisRiskLevel } from './safetyAnalysisRiskLevel';
 import type { SafetyAnalysisStatus } from './safetyAnalysisStatus';
+import type { SafetyContributor } from './safetyContributor';
 
 export interface SafetyAnalysis {
   status: SafetyAnalysisStatus;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
   score?: number | null;
   riskLevel: SafetyAnalysisRiskLevel;
   message: string;
+  contributors: SafetyContributor[];
+  algorithms: string[];
+  generatedAt: Date;
 }

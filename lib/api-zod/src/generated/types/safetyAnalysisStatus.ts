@@ -10,7 +10,6 @@ export type SafetyAnalysisStatus = typeof SafetyAnalysisStatus[keyof typeof Safe
 
 
 export const SafetyAnalysisStatus = {
-  PENDING: 'PENDING',
   AVAILABLE: 'AVAILABLE',
   UNAVAILABLE: 'UNAVAILABLE',
 } as const;

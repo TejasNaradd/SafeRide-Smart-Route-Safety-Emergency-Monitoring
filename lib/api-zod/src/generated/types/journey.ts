@@ -5,13 +5,20 @@
  * SafeRide persistence, safety, and monitoring API
  * OpenAPI spec version: 0.1.0
  */
-import type { CreateJourneyRequest } from './createJourneyRequest';
+import type { Coordinate } from './coordinate';
 import type { JourneyStatus } from './journeyStatus';
-import type { SafetyAnalysis } from './safetyAnalysis';
 
-export type Journey = CreateJourneyRequest & {
+export interface Journey {
   id: string;
+  pickup: string;
+  destination: string;
+  pickupPlaceId?: string;
+  destinationPlaceId?: string;
+  pickupCoordinate: Coordinate;
+  destinationCoordinate: Coordinate;
+  selectedRouteId?: string;
+  routeDistanceMeters: number;
+  routeDurationSeconds: number;
   status: JourneyStatus;
   createdAt: Date;
-  safety?: SafetyAnalysis;
-};
+}

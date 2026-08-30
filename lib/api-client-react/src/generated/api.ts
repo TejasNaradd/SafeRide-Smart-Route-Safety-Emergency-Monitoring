@@ -22,6 +22,7 @@ import type {
 import type {
   AuthResponse,
   BadRequestResponse,
+  CompleteJourneyRequest,
   ContactRequest,
   CreateJourneyRequest,
   EmergencyContact,
@@ -1027,5 +1028,71 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getCreateEmergencyEventMutationOptions(options));
+    }
+
+export const getCompleteJourneyUrl = (id: string,) => {
+
+
+
+
+  return `/api/journeys/${id}/complete`
+}
+
+export const completeJourney = async (id: string,
+    completeJourneyRequest: CompleteJourneyRequest, options?: Parameters<typeof customFetch>[1]): Promise<Journey> => {
+
+  return customFetch<Journey>(getCompleteJourneyUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(completeJourneyRequest)
+  }
+);}
+
+
+
+
+
+export const getCompleteJourneyMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeJourney>>, TError,{id: string;data: BodyType<CompleteJourneyRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completeJourney>>, TError,{id: string;data: BodyType<CompleteJourneyRequest>}, TContext> => {
+
+const mutationKey = ['completeJourney'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completeJourney>>, {id: string;data: BodyType<CompleteJourneyRequest>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  completeJourney(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteJourneyMutationResult = NonNullable<Awaited<ReturnType<typeof completeJourney>>>
+    export type CompleteJourneyMutationBody = BodyType<CompleteJourneyRequest>
+    export type CompleteJourneyMutationError = ErrorType<unknown>
+
+    export const useCompleteJourney = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeJourney>>, TError,{id: string;data: BodyType<CompleteJourneyRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof completeJourney>>,
+        TError,
+        {id: string;data: BodyType<CompleteJourneyRequest>},
+        TContext
+      > => {
+      return useMutation(getCompleteJourneyMutationOptions(options));
     }
 

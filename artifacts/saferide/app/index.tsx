@@ -8,10 +8,11 @@ import { createEmergencyEvent, createJourney, createContact, deleteContact, upda
 import type { ContactRequest, EmergencyContact, Journey, User, Vehicle } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { MapPreview } from "@/components/MapPreview";
+import { ActiveMonitoring, JourneySummaryScreen, type JourneySummaryData } from "@/components/ActiveMonitoring";
 import { calculateRoutes, formatDistance, formatDuration, reverseGeocode, searchLocations, type CandidateRoute, type Place } from "@/lib/geo";
 import { clearToken, getToken, saveToken } from "@/lib/session";
 
-type Screen = "welcome" | "login" | "register" | "home" | "journey" | "vehicle" | "contacts" | "routes" | "review" | "active" | "history" | "profile";
+type Screen = "welcome" | "login" | "register" | "home" | "journey" | "vehicle" | "contacts" | "routes" | "review" | "active" | "summary" | "history" | "profile";
 type Draft = { pickup: Place | null; destination: Place | null; currentLocation: Place | null; routes: CandidateRoute[]; selectedRoute: CandidateRoute | null; vehicle: Vehicle; contactIds: string[]; journeyId: string | null };
 
 const emptyDraft: Draft = { pickup: null, destination: null, currentLocation: null, routes: [], selectedRoute: null, vehicle: {}, contactIds: [], journeyId: null };
@@ -24,6 +25,7 @@ export default function SafeRideApp() {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [history, setHistory] = useState<Journey[]>([]);
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
+  const [completedSummary, setCompletedSummary] = useState<JourneySummaryData | null>(null);
   const [booting, setBooting] = useState(true);
   useEffect(() => { (async () => { const token = await getToken(); if (token) { try { const me = await getCurrentUser(); setUser(me); setScreen("home"); } catch { await clearToken(); } } setBooting(false); })(); }, []);
   const refreshContacts = async () => { if (!user) return; try { setContacts(await listContacts()); } catch { setContacts([]); } };
@@ -42,7 +44,8 @@ export default function SafeRideApp() {
       case "contacts": return <ContactsStep draft={draft} setDraft={setDraft} contacts={contacts} refresh={refreshContacts} onBack={() => setScreen("vehicle")} onNext={() => setScreen("routes")} />;
       case "routes": return <RoutesStep draft={draft} setDraft={setDraft} onBack={() => setScreen("contacts")} onNext={() => setScreen("review")} />;
       case "review": return <ReviewStep draft={draft} setDraft={setDraft} onBack={() => setScreen("routes")} onStarted={(id) => { setDraft((current) => ({ ...current, journeyId: id })); setScreen("active"); }} />;
-      case "active": return <ActiveStep draft={draft} onBack={() => setScreen("home")} />;
+      case "active": return <ActiveMonitoring draft={draft} onEnded={(summary) => { setCompletedSummary(summary); setScreen("summary"); }} />;
+      case "summary": return completedSummary ? <JourneySummaryScreen summary={completedSummary} onDone={() => { setCompletedSummary(null); setDraft(emptyDraft); setScreen("home"); }} /> : <Home user={user!} history={history} onJourney={() => { setDraft(emptyDraft); setScreen("journey"); }} onHistory={async () => { try { setHistory(await listJourneyHistory()); } catch { setHistory([]); } setScreen("history"); }} onContacts={() => setScreen("contacts")} onProfile={() => setScreen("profile")} />;
       case "history": return <HistoryStep history={history} onBack={() => setScreen("home")} />;
       case "profile": return <ProfileStep user={user!} onBack={() => setScreen("home")} onSignOut={signOut} />;
     }

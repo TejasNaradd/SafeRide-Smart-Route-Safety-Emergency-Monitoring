@@ -1,0 +1,691 @@
+SAFERIDE — COMPLETE LIVE MONITORING FEATURE REQUIREMENTS
+
+Upgrade the existing Active Journey / SafeRide Monitoring screen into a complete real-time safety monitoring dashboard.
+
+IMPORTANT ARCHITECTURE RULE:
+
+After the user starts SafeRide:
+
+• ALL route information is handled by the Android frontend.
+• The selected route, route geometry, distance, ETA, route progress and current position come from the frontend/map/routing system.
+• NEVER request or receive a journey/route from Spring Boot.
+• Spring Boot must NOT calculate or provide the journey route.
+• The backend is used only for SafeRide monitoring/safety processing, persistence and synchronization.
+• Only the currently implemented THREE safety algorithms should run in the backend.
+• Those three algorithms are currently RULE-BASED and must remain simple/configurable for now.
+• Do not replace them with ML or final algorithms yet.
+• Do not invent additional backend algorithms.
+
+==================================================
+LIVE MONITORING SCREEN
+==================================================
+
+After START SAFERIDE, show a complete monitoring dashboard containing:
+
+1. Live journey map
+2. Current GPS location
+3. Planned route
+4. Destination
+5. Route progress
+6. Distance travelled
+7. Distance remaining
+8. ETA
+9. Elapsed journey time
+10. Current journey status
+11. Overall safety/emergency score
+12. Current risk level
+13. Individual safety contributors
+14. Live monitoring events
+15. Emergency/SOS control
+16. Manual testing controls for every safety contributor
+17. End SafeRide control
+
+The map remains the main visual element.
+
+==================================================
+ROUTE INFORMATION
+==================================================
+
+The frontend owns all journey/route information.
+
+Display:
+
+• selected route
+• route geometry
+• current GPS position
+• destination
+• route progress
+• travelled distance
+• remaining distance
+• ETA
+• elapsed time
+
+The route must NOT come from the backend.
+
+The backend must only receive relevant monitoring information after the frontend has already obtained the route.
+
+==================================================
+SAFETY / EMERGENCY SCORE
+==================================================
+
+Display a prominent:
+
+SAFETY SCORE
+XX / 100
+
+and:
+
+LOW RISK
+MEDIUM RISK
+HIGH RISK
+CRITICAL
+
+The score must be dynamically calculated from the safety contributors.
+
+Do not display a permanently static score.
+
+The three currently implemented backend algorithms contribute to the score using the current temporary RULE-BASED logic.
+
+Keep their weights/configuration changeable.
+
+Do not hard-code the weights throughout the application.
+
+==================================================
+SAFETY CONTRIBUTORS
+==================================================
+
+The monitoring screen must expose ALL parameters that contribute to the emergency/safety score.
+
+Include the currently identified safety contributors:
+
+• Route deviation
+• Stationary/prolonged stationary condition
+• Street-lighting condition
+• CCTV/security coverage
+• Traffic condition
+• Crime/risk level of the area
+• Road/environmental safety condition
+• Time/context of journey
+• Overall location/environment risk
+
+Each contributor must have:
+
+• current value/state
+• contribution to safety/risk
+• status indicator
+• ability to be included in the overall score
+
+Do not hide these factors behind the final score.
+
+The user must be able to see WHY the current safety score changed.
+
+==================================================
+THREE CURRENT BACKEND ALGORITHMS
+==================================================
+
+Only THREE algorithms are currently active in the backend.
+
+They are RULE-BASED temporary implementations.
+
+Use the currently agreed temporary rules/weights.
+
+For example, if a factor currently has a value/weight such as:
+
+Street lighting = 0
+Route deviation = 0.5
+
+preserve the configured values rather than replacing them with invented ML predictions.
+
+The architecture must make it obvious that these are TEMPORARY RULE-BASED VALUES and can later be replaced by the actual algorithms.
+
+Do not claim that these temporary rules are the final SafeRide algorithms.
+
+==================================================
+CONTRIBUTOR STATUS
+==================================================
+
+Show individual contributor cards such as:
+
+ROUTE DEVIATION
+Status: Normal
+Contribution: Low
+
+STATIONARY CONDITION
+Status: Moving
+Contribution: Low
+
+STREET LIGHTING
+Status: Adequate
+Contribution: Low
+
+CCTV / SECURITY
+Status: Available
+Contribution: Low
+
+TRAFFIC
+Status: Moderate
+Contribution: Medium
+
+AREA RISK
+Status: Low
+Contribution: Low
+
+ROAD / ENVIRONMENT
+Status: Safe
+Contribution: Low
+
+TIME / CONTEXT
+Status: Normal
+Contribution: Low
+
+OVERALL LOCATION RISK
+Status: Low
+Contribution: Low
+
+The displayed values must reflect the current monitoring state/data.
+
+Do not use fake values during normal operation.
+
+==================================================
+ROUTE DEVIATION MONITORING
+==================================================
+
+Continuously compare the actual GPS position with the frontend's selected route.
+
+Display:
+
+ON ROUTE
+MINOR DEVIATION
+SIGNIFICANT DEVIATION
+
+When deviation changes:
+
+• update the contributor
+• update safety score
+• update risk level where appropriate
+• create a monitoring event
+• display an appropriate warning
+
+Do not trigger an emergency solely because of a tiny GPS fluctuation.
+
+==================================================
+STATIONARY MONITORING
+==================================================
+
+Continuously monitor:
+
+• movement
+• speed
+• GPS position
+• time stationary
+
+Display:
+
+MOVING
+STATIONARY
+PROLONGED STATIONARY
+
+Show the duration of stationary state.
+
+Do not treat every normal traffic stop as an emergency.
+
+A prolonged/suspicious stationary condition should increase the relevant risk contribution.
+
+==================================================
+ENVIRONMENTAL / SAFETY FACTORS
+==================================================
+
+Display the environmental factors contributing to the safety score.
+
+The system must distinguish:
+
+SAFE / NORMAL
+WARNING
+HIGH RISK
+CRITICAL
+
+For factors where real data is available, use the actual data.
+
+Do not invent live environmental information.
+
+==================================================
+LIVE SAFETY SCORE EXPLANATION
+==================================================
+
+The user should be able to understand how the score was produced.
+
+Provide a section such as:
+
+SAFETY ANALYSIS
+
+Route Deviation       Low impact
+Stationary Condition  Low impact
+Street Lighting       Low impact
+CCTV/Security         Low impact
+Traffic               Medium impact
+Area Risk             Low impact
+Environment           Low impact
+
+Then:
+
+Combined Safety Score
+XX / 100
+
+This makes the system explainable.
+
+==================================================
+LIVE EVENTS
+==================================================
+
+Show a chronological monitoring/event section.
+
+Examples:
+
+09:42 — Journey started
+09:44 — GPS tracking active
+09:48 — Normal route progress
+09:51 — Minor route deviation detected
+09:52 — Returned to planned route
+09:56 — Stationary condition detected
+
+Only create meaningful events.
+
+Do not create an event for every GPS update.
+
+==================================================
+MANUAL EMERGENCY-CONTRIBUTOR TESTING
+==================================================
+
+IMPORTANT:
+
+Add a dedicated testing/control section that allows the developer/user to MANUALLY TRIGGER EACH SAFETY CONTRIBUTOR CONDITION.
+
+This is required for testing the emergency-score calculation before the final algorithms are integrated.
+
+Provide controls for every contributor.
+
+Examples:
+
+[ Test Route Deviation ]
+
+[ Test Prolonged Stationary ]
+
+[ Test Poor Street Lighting ]
+
+[ Test Low/No CCTV ]
+
+[ Test Heavy Traffic ]
+
+[ Test High Area Risk ]
+
+[ Test Unsafe Road/Environment ]
+
+[ Test High-Risk Time/Context ]
+
+[ Test High Location Risk ]
+
+Each control must simulate the corresponding condition inside the monitoring system.
+
+The purpose is to verify:
+
+manual condition
+↓
+contributor changes
+↓
+score changes
+↓
+risk level changes
+↓
+monitoring event
+↓
+appropriate alert
+
+These controls must NOT require changing source code each time.
+
+==================================================
+MANUAL TEST CONTROL BEHAVIOR
+==================================================
+
+Each manual test should provide a clear state.
+
+For example:
+
+Street Lighting:
+NORMAL
+POOR
+
+Route Deviation:
+NORMAL
+MINOR
+SIGNIFICANT
+
+Stationary:
+MOVING
+STATIONARY
+PROLONGED
+
+Traffic:
+NORMAL
+MODERATE
+HEAVY
+
+Area Risk:
+LOW
+MEDIUM
+HIGH
+
+The selected test condition must immediately affect the monitoring UI and temporary safety calculation.
+
+Provide a clear:
+
+RESET TEST CONDITIONS
+
+control.
+
+Reset must return the monitoring system to real/current conditions.
+
+==================================================
+MANUAL TESTING MUST NOT BE REAL EMERGENCY
+==================================================
+
+Testing a safety contributor must NOT automatically send a real SOS/emergency event to emergency contacts.
+
+Testing should simulate the condition and show its effect on the score.
+
+Only the explicit:
+
+EMERGENCY SOS
+
+action should trigger the real emergency workflow.
+
+==================================================
+AUTOMATIC VS MANUAL STATE
+==================================================
+
+Clearly distinguish:
+
+LIVE
+and
+TEST
+
+For example:
+
+● LIVE MONITORING
+
+or:
+
+TEST MODE ACTIVE
+
+When test mode is active, clearly show which contributor is being simulated.
+
+Do not confuse simulated conditions with actual GPS/environment data.
+
+==================================================
+EMERGENCY SCORE BEHAVIOR
+==================================================
+
+The overall score must react to contributor changes.
+
+Normal conditions:
+high safety score / low risk.
+
+Increasing risk:
+score decreases / risk increases.
+
+Critical combination:
+critical risk state.
+
+The score must be bounded:
+
+0–100
+
+Never below 0.
+Never above 100.
+
+==================================================
+RISK LEVELS
+==================================================
+
+Use:
+
+LOW
+MEDIUM
+HIGH
+CRITICAL
+
+Make the thresholds configurable.
+
+Do not scatter threshold numbers throughout the application.
+
+==================================================
+LIVE ALERTS
+==================================================
+
+When an important contributor becomes risky, show an appropriate alert.
+
+Examples:
+
+"Minor route deviation detected."
+
+"Significant route deviation detected."
+
+"Prolonged stationary condition detected."
+
+"Poor safety conditions detected."
+
+"Safety score has decreased."
+
+"High-risk condition detected."
+
+"Critical safety condition detected."
+
+Avoid repeatedly showing the same alert every GPS update.
+
+Only notify when the state meaningfully changes.
+
+==================================================
+SOS
+==================================================
+
+Provide a prominent:
+
+EMERGENCY SOS
+
+button.
+
+Normal contributor changes must NOT automatically trigger SOS.
+
+When the user presses SOS:
+
+1. Show confirmation.
+2. On confirmation, capture latest location.
+3. Create emergency event.
+4. Associate it with current journey.
+5. Send it to backend.
+6. Show EMERGENCY ACTIVE state.
+
+Display:
+
+Emergency Active
+Current Location
+Journey
+Time
+Safety Status
+
+Prevent accidental duplicate SOS requests.
+
+==================================================
+AUTOMATIC CRITICAL CONDITION
+==================================================
+
+The monitoring system may identify a CRITICAL risk condition from the combined safety analysis.
+
+However:
+
+CRITICAL RISK
+and
+REAL SOS
+
+must remain separate concepts.
+
+A critical safety score should produce a strong warning and require the defined emergency workflow rather than silently sending an emergency.
+
+==================================================
+BACKEND RESPONSIBILITY
+==================================================
+
+Spring Boot must NOT provide:
+
+• journey route
+• route geometry
+• map route
+• route alternatives
+• frontend map data
+• location autocomplete
+
+Frontend owns all of these.
+
+Backend handles:
+
+• three current rule-based safety algorithms
+• safety analysis
+• safety events
+• journey persistence
+• GPS monitoring data
+• emergency events
+• history
+
+==================================================
+NO BACKEND ROUTE
+==================================================
+
+The final architecture must behave as:
+
+Frontend routing provider
+↓
+Selected route
+↓
+Live GPS
+↓
+Local route monitoring
+↓
+Safety analysis
+↓
+Three current backend rule-based algorithms where required
+↓
+Combined safety score
+↓
+Monitoring UI
+
+Never:
+
+Frontend
+↓
+Spring Boot
+↓
+generate journey
+↓
+Frontend
+
+==================================================
+MONITORING INFORMATION
+==================================================
+
+Always show:
+
+LIVE STATUS
+GPS STATUS
+ROUTE STATUS
+SAFETY SCORE
+RISK LEVEL
+DISTANCE
+ETA
+ELAPSED TIME
+CURRENT LOCATION
+SAFETY CONTRIBUTORS
+RECENT EVENTS
+
+==================================================
+END SAFERIDE
+==================================================
+
+Provide:
+
+END SAFERIDE
+
+with confirmation.
+
+After confirmation:
+
+• stop monitoring
+• stop GPS tracking
+• stop periodic monitoring updates
+• finalize safety state
+• save journey
+• save important events
+• show final journey summary
+
+==================================================
+FINAL JOURNEY SUMMARY
+==================================================
+
+Show:
+
+Journey Completed
+
+Source
+Destination
+Distance
+Duration
+
+Final Safety Score
+Final Risk Level
+
+Route Deviations
+Stationary Events
+Safety Events
+Emergency Status
+
+Safety Analysis Summary
+
+Show the actual contributors that affected the final score.
+
+==================================================
+IMPORTANT FINAL REQUIREMENTS
+==================================================
+
+The monitoring screen must NOT be just:
+
+map + elapsed time + distance + SOS.
+
+It must function as a complete SafeRide safety-monitoring dashboard.
+
+The user must be able to see:
+
+WHERE they are
+WHERE they are supposed to go
+HOW the journey is progressing
+WHETHER they deviated
+WHETHER they stopped
+WHAT safety factors are currently active
+HOW each factor contributes to risk
+WHAT the combined safety score is
+WHAT the current risk level is
+WHAT events have occurred
+AND manually test every emergency-score contributor.
+
+All route/journey information after Start SafeRide is FRONTEND-controlled.
+
+Only the THREE currently implemented backend algorithms perform backend safety analysis, and those algorithms remain RULE-BASED for now.
+
+All temporary weights/rules must remain configurable and replaceable later.
+
+Do not introduce Bluetooth.
+
+Do not introduce additional algorithms.
+
+Do not replace the three temporary algorithms with ML.
+
+Do not use fake normal-operation data.
+
+Implement the complete live monitoring functionality with automatic monitoring AND manual contributor testing.

@@ -5,10 +5,10 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import healthRouter from "./health";
 import { createToken, publicUser, requireAuth, type AuthenticatedRequest } from "../lib/auth";
-import { PendingSafetyAnalyzer } from "../lib/safety";
+import { RuleBasedSafetyAnalyzer } from "../lib/safety";
 
 const router: IRouter = Router();
-const safetyAnalyzer = new PendingSafetyAnalyzer();
+const safetyAnalyzer = new RuleBasedSafetyAnalyzer();
 
 const coordinates = z.object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180) });
 const contactSchema = z.object({ name: z.string().min(2), phone: z.string().min(7), relationship: z.string().optional() });
@@ -103,10 +103,9 @@ async function journeyResponse(id: string, userId: string) {
     pickupPlaceId: journey.pickupPlaceId ?? undefined, destinationPlaceId: journey.destinationPlaceId ?? undefined,
     pickupCoordinate: { latitude: journey.pickupLatitude, longitude: journey.pickupLongitude },
     destinationCoordinate: { latitude: journey.destinationLatitude, longitude: journey.destinationLongitude },
-    selectedRouteId: journey.selectedRouteId ?? undefined,
-    routeDistanceMeters: journey.routeDistanceMeters, routeDurationSeconds: journey.routeDurationSeconds,
-    routePoints: selected ? JSON.parse(selected.pointsJson) : [], status: journey.status, createdAt: journey.createdAt.toISOString(),
-    safety: selected ? { status: selected.safetyStatus, score: selected.safetyScore, riskLevel: selected.riskLevel, message: selected.safetyStatus === "PENDING" ? "Safety analysis pending." : "Safety analysis available." } : undefined,
+     selectedRouteId: journey.selectedRouteId ?? undefined,
+     routeDistanceMeters: journey.routeDistanceMeters, routeDurationSeconds: journey.routeDurationSeconds,
+     status: journey.status, createdAt: journey.createdAt.toISOString(),
   };
 }
 
@@ -143,15 +142,28 @@ router.get("/journeys/:id", requireAuth, async (req: AuthenticatedRequest, res) 
 });
 
 router.post("/journeys/:id/safety-analysis", requireAuth, async (req: AuthenticatedRequest, res) => {
-  const parsed = z.object({ routeId: z.string(), routePoints: journeySchema.shape.routePoints }).safeParse(req.body);
+  const parsed = z.object({
+    routeId: z.string(),
+    routeDeviationMeters: z.number().nonnegative().optional(),
+    stationarySeconds: z.number().nonnegative().optional(),
+    speedMetersPerSecond: z.number().nonnegative().optional(),
+    includedContributors: z.array(z.string()).optional(),
+    testOverrides: z.record(z.string()).optional(),
+  }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ message: "Route data is incomplete." }); return; }
-  const result = await safetyAnalyzer.analyze(parsed.data.routePoints);
+  const [journey] = await db.select({ id: journeys.id }).from(journeys)
+    .where(and(eq(journeys.id, String(req.params.id)), eq(journeys.userId, req.userId!))).limit(1);
+  if (!journey) { res.status(404).json({ message: "Journey not found." }); return; }
+  const result = await safetyAnalyzer.analyze(parsed.data);
   res.json(result);
 });
 
 router.post("/journeys/:id/locations", requireAuth, async (req: AuthenticatedRequest, res) => {
   const parsed = z.object({ ...coordinates.shape, recordedAt: z.string().datetime(), accuracyMeters: z.number().optional(), speedMetersPerSecond: z.number().optional() }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ message: "Location update is invalid." }); return; }
+  const [journey] = await db.select({ id: journeys.id }).from(journeys)
+    .where(and(eq(journeys.id, String(req.params.id)), eq(journeys.userId, req.userId!))).limit(1);
+  if (!journey) { res.status(404).json({ message: "Journey not found." }); return; }
   const [row] = await db.insert(locationPoints).values({ journeyId: String(req.params.id), ...parsed.data, recordedAt: new Date(parsed.data.recordedAt) }).returning();
   res.status(201).json(row);
 });
@@ -159,8 +171,33 @@ router.post("/journeys/:id/locations", requireAuth, async (req: AuthenticatedReq
 router.post("/journeys/:id/emergency", requireAuth, async (req: AuthenticatedRequest, res) => {
   const parsed = z.object({ type: z.enum(["SOS", "DEVIATION", "STATIONARY"]), message: z.string().min(1), coordinate: coordinates.optional() }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ message: "Emergency event is invalid." }); return; }
+  const [journey] = await db.select({ id: journeys.id }).from(journeys)
+    .where(and(eq(journeys.id, String(req.params.id)), eq(journeys.userId, req.userId!))).limit(1);
+  if (!journey) { res.status(404).json({ message: "Journey not found." }); return; }
+  if (parsed.data.type === "SOS") {
+    const [recentSos] = await db.select({ id: emergencyEvents.id }).from(emergencyEvents)
+      .where(and(eq(emergencyEvents.journeyId, String(req.params.id)), eq(emergencyEvents.type, "SOS")))
+      .orderBy(desc(emergencyEvents.createdAt)).limit(1);
+    if (recentSos) { res.status(409).json({ message: "SOS is already active for this journey." }); return; }
+  }
   const [row] = await db.insert(emergencyEvents).values({ journeyId: String(req.params.id), type: parsed.data.type, message: parsed.data.message, latitude: parsed.data.coordinate?.latitude, longitude: parsed.data.coordinate?.longitude }).returning();
   res.status(201).json({ ...row, coordinate: row.latitude == null ? undefined : { latitude: row.latitude, longitude: row.longitude } });
+});
+
+router.post("/journeys/:id/complete", requireAuth, async (req: AuthenticatedRequest, res) => {
+  const parsed = z.object({
+    finalScore: z.number().min(0).max(100).nullable(),
+    finalRiskLevel: z.string().min(1),
+    routeDeviationCount: z.number().int().nonnegative(),
+    stationaryEventCount: z.number().int().nonnegative(),
+    emergencyActive: z.boolean(),
+  }).safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ message: "Final journey summary is invalid." }); return; }
+  const [journey] = await db.update(journeys).set({ status: "COMPLETED" })
+    .where(and(eq(journeys.id, String(req.params.id)), eq(journeys.userId, req.userId!))).returning();
+  if (!journey) { res.status(404).json({ message: "Journey not found." }); return; }
+  const result = await journeyResponse(journey.id, req.userId!);
+  res.json(result);
 });
 
 export default router;

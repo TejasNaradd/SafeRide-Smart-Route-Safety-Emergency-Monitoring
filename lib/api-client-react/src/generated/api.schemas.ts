@@ -99,11 +99,39 @@ export const JourneyStatus = {
   CANCELLED: 'CANCELLED',
 } as const;
 
+export interface Journey {
+  id: string;
+  pickup: string;
+  destination: string;
+  pickupPlaceId?: string;
+  destinationPlaceId?: string;
+  pickupCoordinate: Coordinate;
+  destinationCoordinate: Coordinate;
+  selectedRouteId?: string;
+  routeDistanceMeters: number;
+  routeDurationSeconds: number;
+  status: JourneyStatus;
+  createdAt: string;
+}
+
+export type SafetyAnalysisRequestTestOverrides = {[key: string]: string};
+
+export interface SafetyAnalysisRequest {
+  routeId: string;
+  /** @minimum 0 */
+  routeDeviationMeters?: number;
+  /** @minimum 0 */
+  stationarySeconds?: number;
+  /** @minimum 0 */
+  speedMetersPerSecond?: number;
+  includedContributors?: string[];
+  testOverrides?: SafetyAnalysisRequestTestOverrides;
+}
+
 export type SafetyAnalysisStatus = typeof SafetyAnalysisStatus[keyof typeof SafetyAnalysisStatus];
 
 
 export const SafetyAnalysisStatus = {
-  PENDING: 'PENDING',
   AVAILABLE: 'AVAILABLE',
   UNAVAILABLE: 'UNAVAILABLE',
 } as const;
@@ -116,25 +144,70 @@ export const SafetyAnalysisRiskLevel = {
   LOW: 'LOW',
   MEDIUM: 'MEDIUM',
   HIGH: 'HIGH',
+  CRITICAL: 'CRITICAL',
 } as const;
+
+export type SafetyContributorImpact = typeof SafetyContributorImpact[keyof typeof SafetyContributorImpact];
+
+
+export const SafetyContributorImpact = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+  CRITICAL: 'CRITICAL',
+  NOT_ASSESSED: 'NOT_ASSESSED',
+} as const;
+
+export type SafetyContributorSource = typeof SafetyContributorSource[keyof typeof SafetyContributorSource];
+
+
+export const SafetyContributorSource = {
+  LIVE: 'LIVE',
+  TEST: 'TEST',
+  UNAVAILABLE: 'UNAVAILABLE',
+} as const;
+
+export interface SafetyContributor {
+  id: string;
+  label: string;
+  state: string;
+  impact: SafetyContributorImpact;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  penalty: number;
+  included: boolean;
+  assessed: boolean;
+  source: SafetyContributorSource;
+}
 
 export interface SafetyAnalysis {
   status: SafetyAnalysisStatus;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
   score?: number | null;
   riskLevel: SafetyAnalysisRiskLevel;
   message: string;
+  contributors: SafetyContributor[];
+  algorithms: string[];
+  generatedAt: string;
 }
 
-export type Journey = CreateJourneyRequest & {
-  id: string;
-  status: JourneyStatus;
-  createdAt: string;
-  safety?: SafetyAnalysis;
-};
-
-export interface SafetyAnalysisRequest {
-  routeId: string;
-  routePoints: RoutePoint[];
+export interface CompleteJourneyRequest {
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  finalScore?: number | null;
+  finalRiskLevel: string;
+  /** @minimum 0 */
+  routeDeviationCount: number;
+  /** @minimum 0 */
+  stationaryEventCount: number;
+  emergencyActive: boolean;
 }
 
 export type LocationPointRequest = Coordinate & {

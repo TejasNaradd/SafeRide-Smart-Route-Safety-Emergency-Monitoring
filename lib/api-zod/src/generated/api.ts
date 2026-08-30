@@ -203,128 +203,76 @@ export const CreateJourneyBody = zod.object({
   "contactIds": zod.array(zod.string()).optional()
 })
 
-export const createJourneyResponseOnePickupCoordinateLatitudeMin = -90;
-export const createJourneyResponseOnePickupCoordinateLatitudeMax = 90;
+export const createJourneyResponsePickupCoordinateLatitudeMin = -90;
+export const createJourneyResponsePickupCoordinateLatitudeMax = 90;
 
-export const createJourneyResponseOnePickupCoordinateLongitudeMin = -180;
-export const createJourneyResponseOnePickupCoordinateLongitudeMax = 180;
+export const createJourneyResponsePickupCoordinateLongitudeMin = -180;
+export const createJourneyResponsePickupCoordinateLongitudeMax = 180;
 
-export const createJourneyResponseOneDestinationCoordinateLatitudeMin = -90;
-export const createJourneyResponseOneDestinationCoordinateLatitudeMax = 90;
+export const createJourneyResponseDestinationCoordinateLatitudeMin = -90;
+export const createJourneyResponseDestinationCoordinateLatitudeMax = 90;
 
-export const createJourneyResponseOneDestinationCoordinateLongitudeMin = -180;
-export const createJourneyResponseOneDestinationCoordinateLongitudeMax = 180;
-
-export const createJourneyResponseOneRoutePointsItemOneLatitudeMin = -90;
-export const createJourneyResponseOneRoutePointsItemOneLatitudeMax = 90;
-
-export const createJourneyResponseOneRoutePointsItemOneLongitudeMin = -180;
-export const createJourneyResponseOneRoutePointsItemOneLongitudeMax = 180;
+export const createJourneyResponseDestinationCoordinateLongitudeMin = -180;
+export const createJourneyResponseDestinationCoordinateLongitudeMax = 180;
 
 
 
 export const CreateJourneyResponse = zod.object({
+  "id": zod.string(),
   "pickup": zod.string(),
   "destination": zod.string(),
   "pickupPlaceId": zod.string().optional(),
   "destinationPlaceId": zod.string().optional(),
   "pickupCoordinate": zod.object({
-  "latitude": zod.number().min(createJourneyResponseOnePickupCoordinateLatitudeMin).max(createJourneyResponseOnePickupCoordinateLatitudeMax),
-  "longitude": zod.number().min(createJourneyResponseOnePickupCoordinateLongitudeMin).max(createJourneyResponseOnePickupCoordinateLongitudeMax)
+  "latitude": zod.number().min(createJourneyResponsePickupCoordinateLatitudeMin).max(createJourneyResponsePickupCoordinateLatitudeMax),
+  "longitude": zod.number().min(createJourneyResponsePickupCoordinateLongitudeMin).max(createJourneyResponsePickupCoordinateLongitudeMax)
 }),
   "destinationCoordinate": zod.object({
-  "latitude": zod.number().min(createJourneyResponseOneDestinationCoordinateLatitudeMin).max(createJourneyResponseOneDestinationCoordinateLatitudeMax),
-  "longitude": zod.number().min(createJourneyResponseOneDestinationCoordinateLongitudeMin).max(createJourneyResponseOneDestinationCoordinateLongitudeMax)
+  "latitude": zod.number().min(createJourneyResponseDestinationCoordinateLatitudeMin).max(createJourneyResponseDestinationCoordinateLatitudeMax),
+  "longitude": zod.number().min(createJourneyResponseDestinationCoordinateLongitudeMin).max(createJourneyResponseDestinationCoordinateLongitudeMax)
 }),
   "selectedRouteId": zod.string().optional(),
   "routeDistanceMeters": zod.number(),
   "routeDurationSeconds": zod.number(),
-  "routePoints": zod.array(zod.object({
-  "latitude": zod.number().min(createJourneyResponseOneRoutePointsItemOneLatitudeMin).max(createJourneyResponseOneRoutePointsItemOneLatitudeMax),
-  "longitude": zod.number().min(createJourneyResponseOneRoutePointsItemOneLongitudeMin).max(createJourneyResponseOneRoutePointsItemOneLongitudeMax)
-}).and(zod.object({
-  "sequence": zod.number()
-}))),
-  "vehicle": zod.object({
-  "licensePlate": zod.string().optional(),
-  "driverName": zod.string().optional(),
-  "model": zod.string().optional(),
-  "color": zod.string().optional()
-}).optional(),
-  "contactIds": zod.array(zod.string()).optional()
-}).and(zod.object({
-  "id": zod.string(),
   "status": zod.enum(['PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED']),
-  "createdAt": zod.coerce.date(),
-  "safety": zod.object({
-  "status": zod.enum(['PENDING', 'AVAILABLE', 'UNAVAILABLE']),
-  "score": zod.number().nullish(),
-  "riskLevel": zod.enum(['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH']),
-  "message": zod.string()
-}).optional()
-}))
+  "createdAt": zod.coerce.date()
+})
 
 
-export const listJourneyHistoryResponseOnePickupCoordinateLatitudeMin = -90;
-export const listJourneyHistoryResponseOnePickupCoordinateLatitudeMax = 90;
+export const listJourneyHistoryResponsePickupCoordinateLatitudeMin = -90;
+export const listJourneyHistoryResponsePickupCoordinateLatitudeMax = 90;
 
-export const listJourneyHistoryResponseOnePickupCoordinateLongitudeMin = -180;
-export const listJourneyHistoryResponseOnePickupCoordinateLongitudeMax = 180;
+export const listJourneyHistoryResponsePickupCoordinateLongitudeMin = -180;
+export const listJourneyHistoryResponsePickupCoordinateLongitudeMax = 180;
 
-export const listJourneyHistoryResponseOneDestinationCoordinateLatitudeMin = -90;
-export const listJourneyHistoryResponseOneDestinationCoordinateLatitudeMax = 90;
+export const listJourneyHistoryResponseDestinationCoordinateLatitudeMin = -90;
+export const listJourneyHistoryResponseDestinationCoordinateLatitudeMax = 90;
 
-export const listJourneyHistoryResponseOneDestinationCoordinateLongitudeMin = -180;
-export const listJourneyHistoryResponseOneDestinationCoordinateLongitudeMax = 180;
-
-export const listJourneyHistoryResponseOneRoutePointsItemOneLatitudeMin = -90;
-export const listJourneyHistoryResponseOneRoutePointsItemOneLatitudeMax = 90;
-
-export const listJourneyHistoryResponseOneRoutePointsItemOneLongitudeMin = -180;
-export const listJourneyHistoryResponseOneRoutePointsItemOneLongitudeMax = 180;
+export const listJourneyHistoryResponseDestinationCoordinateLongitudeMin = -180;
+export const listJourneyHistoryResponseDestinationCoordinateLongitudeMax = 180;
 
 
 
 export const ListJourneyHistoryResponseItem = zod.object({
+  "id": zod.string(),
   "pickup": zod.string(),
   "destination": zod.string(),
   "pickupPlaceId": zod.string().optional(),
   "destinationPlaceId": zod.string().optional(),
   "pickupCoordinate": zod.object({
-  "latitude": zod.number().min(listJourneyHistoryResponseOnePickupCoordinateLatitudeMin).max(listJourneyHistoryResponseOnePickupCoordinateLatitudeMax),
-  "longitude": zod.number().min(listJourneyHistoryResponseOnePickupCoordinateLongitudeMin).max(listJourneyHistoryResponseOnePickupCoordinateLongitudeMax)
+  "latitude": zod.number().min(listJourneyHistoryResponsePickupCoordinateLatitudeMin).max(listJourneyHistoryResponsePickupCoordinateLatitudeMax),
+  "longitude": zod.number().min(listJourneyHistoryResponsePickupCoordinateLongitudeMin).max(listJourneyHistoryResponsePickupCoordinateLongitudeMax)
 }),
   "destinationCoordinate": zod.object({
-  "latitude": zod.number().min(listJourneyHistoryResponseOneDestinationCoordinateLatitudeMin).max(listJourneyHistoryResponseOneDestinationCoordinateLatitudeMax),
-  "longitude": zod.number().min(listJourneyHistoryResponseOneDestinationCoordinateLongitudeMin).max(listJourneyHistoryResponseOneDestinationCoordinateLongitudeMax)
+  "latitude": zod.number().min(listJourneyHistoryResponseDestinationCoordinateLatitudeMin).max(listJourneyHistoryResponseDestinationCoordinateLatitudeMax),
+  "longitude": zod.number().min(listJourneyHistoryResponseDestinationCoordinateLongitudeMin).max(listJourneyHistoryResponseDestinationCoordinateLongitudeMax)
 }),
   "selectedRouteId": zod.string().optional(),
   "routeDistanceMeters": zod.number(),
   "routeDurationSeconds": zod.number(),
-  "routePoints": zod.array(zod.object({
-  "latitude": zod.number().min(listJourneyHistoryResponseOneRoutePointsItemOneLatitudeMin).max(listJourneyHistoryResponseOneRoutePointsItemOneLatitudeMax),
-  "longitude": zod.number().min(listJourneyHistoryResponseOneRoutePointsItemOneLongitudeMin).max(listJourneyHistoryResponseOneRoutePointsItemOneLongitudeMax)
-}).and(zod.object({
-  "sequence": zod.number()
-}))),
-  "vehicle": zod.object({
-  "licensePlate": zod.string().optional(),
-  "driverName": zod.string().optional(),
-  "model": zod.string().optional(),
-  "color": zod.string().optional()
-}).optional(),
-  "contactIds": zod.array(zod.string()).optional()
-}).and(zod.object({
-  "id": zod.string(),
   "status": zod.enum(['PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED']),
-  "createdAt": zod.coerce.date(),
-  "safety": zod.object({
-  "status": zod.enum(['PENDING', 'AVAILABLE', 'UNAVAILABLE']),
-  "score": zod.number().nullish(),
-  "riskLevel": zod.enum(['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH']),
-  "message": zod.string()
-}).optional()
-}))
+  "createdAt": zod.coerce.date()
+})
 export const ListJourneyHistoryResponse = zod.array(ListJourneyHistoryResponseItem)
 
 
@@ -332,95 +280,88 @@ export const GetJourneyParams = zod.object({
   "id": zod.coerce.string()
 })
 
-export const getJourneyResponseOnePickupCoordinateLatitudeMin = -90;
-export const getJourneyResponseOnePickupCoordinateLatitudeMax = 90;
+export const getJourneyResponsePickupCoordinateLatitudeMin = -90;
+export const getJourneyResponsePickupCoordinateLatitudeMax = 90;
 
-export const getJourneyResponseOnePickupCoordinateLongitudeMin = -180;
-export const getJourneyResponseOnePickupCoordinateLongitudeMax = 180;
+export const getJourneyResponsePickupCoordinateLongitudeMin = -180;
+export const getJourneyResponsePickupCoordinateLongitudeMax = 180;
 
-export const getJourneyResponseOneDestinationCoordinateLatitudeMin = -90;
-export const getJourneyResponseOneDestinationCoordinateLatitudeMax = 90;
+export const getJourneyResponseDestinationCoordinateLatitudeMin = -90;
+export const getJourneyResponseDestinationCoordinateLatitudeMax = 90;
 
-export const getJourneyResponseOneDestinationCoordinateLongitudeMin = -180;
-export const getJourneyResponseOneDestinationCoordinateLongitudeMax = 180;
-
-export const getJourneyResponseOneRoutePointsItemOneLatitudeMin = -90;
-export const getJourneyResponseOneRoutePointsItemOneLatitudeMax = 90;
-
-export const getJourneyResponseOneRoutePointsItemOneLongitudeMin = -180;
-export const getJourneyResponseOneRoutePointsItemOneLongitudeMax = 180;
+export const getJourneyResponseDestinationCoordinateLongitudeMin = -180;
+export const getJourneyResponseDestinationCoordinateLongitudeMax = 180;
 
 
 
 export const GetJourneyResponse = zod.object({
+  "id": zod.string(),
   "pickup": zod.string(),
   "destination": zod.string(),
   "pickupPlaceId": zod.string().optional(),
   "destinationPlaceId": zod.string().optional(),
   "pickupCoordinate": zod.object({
-  "latitude": zod.number().min(getJourneyResponseOnePickupCoordinateLatitudeMin).max(getJourneyResponseOnePickupCoordinateLatitudeMax),
-  "longitude": zod.number().min(getJourneyResponseOnePickupCoordinateLongitudeMin).max(getJourneyResponseOnePickupCoordinateLongitudeMax)
+  "latitude": zod.number().min(getJourneyResponsePickupCoordinateLatitudeMin).max(getJourneyResponsePickupCoordinateLatitudeMax),
+  "longitude": zod.number().min(getJourneyResponsePickupCoordinateLongitudeMin).max(getJourneyResponsePickupCoordinateLongitudeMax)
 }),
   "destinationCoordinate": zod.object({
-  "latitude": zod.number().min(getJourneyResponseOneDestinationCoordinateLatitudeMin).max(getJourneyResponseOneDestinationCoordinateLatitudeMax),
-  "longitude": zod.number().min(getJourneyResponseOneDestinationCoordinateLongitudeMin).max(getJourneyResponseOneDestinationCoordinateLongitudeMax)
+  "latitude": zod.number().min(getJourneyResponseDestinationCoordinateLatitudeMin).max(getJourneyResponseDestinationCoordinateLatitudeMax),
+  "longitude": zod.number().min(getJourneyResponseDestinationCoordinateLongitudeMin).max(getJourneyResponseDestinationCoordinateLongitudeMax)
 }),
   "selectedRouteId": zod.string().optional(),
   "routeDistanceMeters": zod.number(),
   "routeDurationSeconds": zod.number(),
-  "routePoints": zod.array(zod.object({
-  "latitude": zod.number().min(getJourneyResponseOneRoutePointsItemOneLatitudeMin).max(getJourneyResponseOneRoutePointsItemOneLatitudeMax),
-  "longitude": zod.number().min(getJourneyResponseOneRoutePointsItemOneLongitudeMin).max(getJourneyResponseOneRoutePointsItemOneLongitudeMax)
-}).and(zod.object({
-  "sequence": zod.number()
-}))),
-  "vehicle": zod.object({
-  "licensePlate": zod.string().optional(),
-  "driverName": zod.string().optional(),
-  "model": zod.string().optional(),
-  "color": zod.string().optional()
-}).optional(),
-  "contactIds": zod.array(zod.string()).optional()
-}).and(zod.object({
-  "id": zod.string(),
   "status": zod.enum(['PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED']),
-  "createdAt": zod.coerce.date(),
-  "safety": zod.object({
-  "status": zod.enum(['PENDING', 'AVAILABLE', 'UNAVAILABLE']),
-  "score": zod.number().nullish(),
-  "riskLevel": zod.enum(['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH']),
-  "message": zod.string()
-}).optional()
-}))
+  "createdAt": zod.coerce.date()
+})
 
 
 export const AnalyzeJourneySafetyParams = zod.object({
   "id": zod.coerce.string()
 })
 
-export const analyzeJourneySafetyBodyRoutePointsItemOneLatitudeMin = -90;
-export const analyzeJourneySafetyBodyRoutePointsItemOneLatitudeMax = 90;
+export const analyzeJourneySafetyBodyRouteDeviationMetersMin = 0;
 
-export const analyzeJourneySafetyBodyRoutePointsItemOneLongitudeMin = -180;
-export const analyzeJourneySafetyBodyRoutePointsItemOneLongitudeMax = 180;
+export const analyzeJourneySafetyBodyStationarySecondsMin = 0;
+
+export const analyzeJourneySafetyBodySpeedMetersPerSecondMin = 0;
 
 
 
 export const AnalyzeJourneySafetyBody = zod.object({
   "routeId": zod.string(),
-  "routePoints": zod.array(zod.object({
-  "latitude": zod.number().min(analyzeJourneySafetyBodyRoutePointsItemOneLatitudeMin).max(analyzeJourneySafetyBodyRoutePointsItemOneLatitudeMax),
-  "longitude": zod.number().min(analyzeJourneySafetyBodyRoutePointsItemOneLongitudeMin).max(analyzeJourneySafetyBodyRoutePointsItemOneLongitudeMax)
-}).and(zod.object({
-  "sequence": zod.number()
-})))
+  "routeDeviationMeters": zod.number().min(analyzeJourneySafetyBodyRouteDeviationMetersMin).optional(),
+  "stationarySeconds": zod.number().min(analyzeJourneySafetyBodyStationarySecondsMin).optional(),
+  "speedMetersPerSecond": zod.number().min(analyzeJourneySafetyBodySpeedMetersPerSecondMin).optional(),
+  "includedContributors": zod.array(zod.string()).optional(),
+  "testOverrides": zod.record(zod.string(), zod.string()).optional()
 })
 
+export const analyzeJourneySafetyResponseScoreMin = 0;
+export const analyzeJourneySafetyResponseScoreMax = 100;
+
+export const analyzeJourneySafetyResponseContributorsItemPenaltyMin = 0;
+export const analyzeJourneySafetyResponseContributorsItemPenaltyMax = 1;
+
+
+
 export const AnalyzeJourneySafetyResponse = zod.object({
-  "status": zod.enum(['PENDING', 'AVAILABLE', 'UNAVAILABLE']),
-  "score": zod.number().nullish(),
-  "riskLevel": zod.enum(['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH']),
-  "message": zod.string()
+  "status": zod.enum(['AVAILABLE', 'UNAVAILABLE']),
+  "score": zod.number().min(analyzeJourneySafetyResponseScoreMin).max(analyzeJourneySafetyResponseScoreMax).nullish(),
+  "riskLevel": zod.enum(['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL']),
+  "message": zod.string(),
+  "contributors": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "state": zod.string(),
+  "impact": zod.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL', 'NOT_ASSESSED']),
+  "penalty": zod.number().min(analyzeJourneySafetyResponseContributorsItemPenaltyMin).max(analyzeJourneySafetyResponseContributorsItemPenaltyMax),
+  "included": zod.boolean(),
+  "assessed": zod.boolean(),
+  "source": zod.enum(['LIVE', 'TEST', 'UNAVAILABLE'])
+})),
+  "algorithms": zod.array(zod.string()),
+  "generatedAt": zod.coerce.date()
 })
 
 
@@ -505,5 +446,62 @@ export const CreateEmergencyEventResponse = zod.object({
   "id": zod.string(),
   "createdAt": zod.coerce.date()
 }))
+
+
+export const CompleteJourneyParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const completeJourneyBodyFinalScoreMin = 0;
+export const completeJourneyBodyFinalScoreMax = 100;
+
+export const completeJourneyBodyRouteDeviationCountMin = 0;
+
+export const completeJourneyBodyStationaryEventCountMin = 0;
+
+
+
+export const CompleteJourneyBody = zod.object({
+  "finalScore": zod.number().min(completeJourneyBodyFinalScoreMin).max(completeJourneyBodyFinalScoreMax).nullish(),
+  "finalRiskLevel": zod.string(),
+  "routeDeviationCount": zod.number().min(completeJourneyBodyRouteDeviationCountMin),
+  "stationaryEventCount": zod.number().min(completeJourneyBodyStationaryEventCountMin),
+  "emergencyActive": zod.boolean()
+})
+
+export const completeJourneyResponsePickupCoordinateLatitudeMin = -90;
+export const completeJourneyResponsePickupCoordinateLatitudeMax = 90;
+
+export const completeJourneyResponsePickupCoordinateLongitudeMin = -180;
+export const completeJourneyResponsePickupCoordinateLongitudeMax = 180;
+
+export const completeJourneyResponseDestinationCoordinateLatitudeMin = -90;
+export const completeJourneyResponseDestinationCoordinateLatitudeMax = 90;
+
+export const completeJourneyResponseDestinationCoordinateLongitudeMin = -180;
+export const completeJourneyResponseDestinationCoordinateLongitudeMax = 180;
+
+
+
+export const CompleteJourneyResponse = zod.object({
+  "id": zod.string(),
+  "pickup": zod.string(),
+  "destination": zod.string(),
+  "pickupPlaceId": zod.string().optional(),
+  "destinationPlaceId": zod.string().optional(),
+  "pickupCoordinate": zod.object({
+  "latitude": zod.number().min(completeJourneyResponsePickupCoordinateLatitudeMin).max(completeJourneyResponsePickupCoordinateLatitudeMax),
+  "longitude": zod.number().min(completeJourneyResponsePickupCoordinateLongitudeMin).max(completeJourneyResponsePickupCoordinateLongitudeMax)
+}),
+  "destinationCoordinate": zod.object({
+  "latitude": zod.number().min(completeJourneyResponseDestinationCoordinateLatitudeMin).max(completeJourneyResponseDestinationCoordinateLatitudeMax),
+  "longitude": zod.number().min(completeJourneyResponseDestinationCoordinateLongitudeMin).max(completeJourneyResponseDestinationCoordinateLongitudeMax)
+}),
+  "selectedRouteId": zod.string().optional(),
+  "routeDistanceMeters": zod.number(),
+  "routeDurationSeconds": zod.number(),
+  "status": zod.enum(['PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED']),
+  "createdAt": zod.coerce.date()
+})
 
 

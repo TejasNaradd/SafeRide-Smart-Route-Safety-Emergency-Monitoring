@@ -5,9 +5,16 @@
  * SafeRide persistence, safety, and monitoring API
  * OpenAPI spec version: 0.1.0
  */
-import type { RoutePoint } from './routePoint';
+import type { SafetyAnalysisRequestTestOverrides } from './safetyAnalysisRequestTestOverrides';
 
 export interface SafetyAnalysisRequest {
   routeId: string;
-  routePoints: RoutePoint[];
+  /** @minimum 0 */
+  routeDeviationMeters?: number;
+  /** @minimum 0 */
+  stationarySeconds?: number;
+  /** @minimum 0 */
+  speedMetersPerSecond?: number;
+  includedContributors?: string[];
+  testOverrides?: SafetyAnalysisRequestTestOverrides;
 }
