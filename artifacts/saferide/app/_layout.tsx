@@ -12,7 +12,12 @@ import { getToken } from "@/lib/session";
 SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 const domain = process.env.EXPO_PUBLIC_DOMAIN;
-setBaseUrl(domain ? `https://${domain}` : null);
+const apiBaseUrl = domain
+  ? /^https?:\/\//i.test(domain)
+    ? domain
+    : `https://${domain}`
+  : null;
+setBaseUrl(apiBaseUrl);
 setAuthTokenGetter(getToken);
 
 export default function RootLayout() {

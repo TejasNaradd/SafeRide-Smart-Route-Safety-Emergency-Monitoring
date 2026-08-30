@@ -43,6 +43,33 @@ pnpm --filter @workspace/db run push
 
 Start the API and Expo workflows from Replit’s workflow controls. The API is available under `/api`, and the mobile preview is available through the Expo preview/QR flow.
 
+### Run on a local PC
+
+Use PostgreSQL locally or provide a reachable PostgreSQL connection string. In a terminal, set the API environment variables and apply the schema:
+
+```bash
+export DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/saferide"
+export JWT_SECRET="use-a-long-random-local-secret"
+pnpm --filter @workspace/db run push
+```
+
+Start the API on port 8080:
+
+```bash
+export PORT=8080
+pnpm --filter @workspace/api-server run dev
+```
+
+Open a second terminal and start the Expo web app:
+
+```bash
+export EXPO_PUBLIC_DOMAIN="http://localhost:8080"
+cd artifacts/saferide
+pnpm exec expo start --web
+```
+
+For Windows PowerShell, use `$env:NAME="value"` instead of `export NAME="value"`. For testing on a physical phone, start Expo with `pnpm exec expo start --lan` and set `EXPO_PUBLIC_DOMAIN` to the PC's LAN address, for example `http://192.168.1.20:8080`; the phone and PC must be on the same network.
+
 ## API surface
 
 - `POST /api/auth/register`
