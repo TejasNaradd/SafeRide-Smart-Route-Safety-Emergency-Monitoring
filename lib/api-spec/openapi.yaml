@@ -3,13 +3,17 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: SafeRide persistence, safety, and monitoring API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+  - name: user
+  - name: contacts
+  - name: journeys
 paths:
   /healthz:
     get:
@@ -24,7 +28,247 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a SafeRide user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /users/me:
+    get:
+      operationId: getCurrentUser
+      tags: [user]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /contacts:
+    get:
+      operationId: listContacts
+      tags: [contacts]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Emergency contacts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EmergencyContact"
+    post:
+      operationId: createContact
+      tags: [contacts]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContactRequest"
+      responses:
+        "201":
+          description: Contact created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmergencyContact"
+  /contacts/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      operationId: updateContact
+      tags: [contacts]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContactRequest"
+      responses:
+        "200":
+          description: Contact updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmergencyContact"
+    delete:
+      operationId: deleteContact
+      tags: [contacts]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204":
+          description: Contact deleted
+  /journeys:
+    post:
+      operationId: createJourney
+      tags: [journeys]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateJourneyRequest"
+      responses:
+        "201":
+          description: Journey created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Journey"
+  /journeys/history:
+    get:
+      operationId: listJourneyHistory
+      tags: [journeys]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Journey history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Journey"
+  /journeys/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      operationId: getJourney
+      tags: [journeys]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Journey
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Journey"
+  /journeys/{id}/safety-analysis:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: analyzeJourneySafety
+      tags: [journeys]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SafetyAnalysisRequest"
+      responses:
+        "200":
+          description: SafeRide safety analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SafetyAnalysis"
+  /journeys/{id}/locations:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: addJourneyLocation
+      tags: [journeys]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocationPointRequest"
+      responses:
+        "201":
+          description: Location stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationPoint"
+  /journeys/{id}/emergency:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      operationId: createEmergencyEvent
+      tags: [journeys]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmergencyRequest"
+      responses:
+        "201":
+          description: Emergency event stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmergencyEvent"
 components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +277,153 @@ components:
           type: string
       required:
         - status
+    Error:
+      type: object
+      properties:
+        message: { type: string }
+      required: [message]
+    RegisterRequest:
+      type: object
+      properties:
+        name: { type: string, minLength: 2 }
+        email: { type: string }
+        password: { type: string, minLength: 8 }
+      required: [name, email, password]
+    LoginRequest:
+      type: object
+      properties:
+        email: { type: string }
+        password: { type: string, minLength: 8 }
+      required: [email, password]
+    AuthResponse:
+      type: object
+      properties:
+        token: { type: string }
+        user: { $ref: "#/components/schemas/User" }
+      required: [token, user]
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+      required: [id, name, email]
+    ContactRequest:
+      type: object
+      properties:
+        name: { type: string, minLength: 2 }
+        phone: { type: string, minLength: 7 }
+        relationship: { type: string }
+      required: [name, phone]
+    EmergencyContact:
+      allOf:
+        - $ref: "#/components/schemas/ContactRequest"
+        - type: object
+          properties:
+            id: { type: string }
+          required: [id]
+    Coordinate:
+      type: object
+      properties:
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+      required: [latitude, longitude]
+    RoutePoint:
+      allOf:
+        - $ref: "#/components/schemas/Coordinate"
+        - type: object
+          properties:
+            sequence: { type: number }
+          required: [sequence]
+    Vehicle:
+      type: object
+      properties:
+        licensePlate: { type: string }
+        driverName: { type: string }
+        model: { type: string }
+        color: { type: string }
+    CreateJourneyRequest:
+      type: object
+      properties:
+        pickup: { type: string }
+        destination: { type: string }
+        pickupPlaceId: { type: string }
+        destinationPlaceId: { type: string }
+        pickupCoordinate: { $ref: "#/components/schemas/Coordinate" }
+        destinationCoordinate: { $ref: "#/components/schemas/Coordinate" }
+        selectedRouteId: { type: string }
+        routeDistanceMeters: { type: number }
+        routeDurationSeconds: { type: number }
+        routePoints:
+          type: array
+          items: { $ref: "#/components/schemas/RoutePoint" }
+        vehicle: { $ref: "#/components/schemas/Vehicle" }
+        contactIds:
+          type: array
+          items: { type: string }
+      required:
+        - pickup
+        - destination
+        - pickupCoordinate
+        - destinationCoordinate
+        - routePoints
+        - routeDistanceMeters
+        - routeDurationSeconds
+    Journey:
+      allOf:
+        - $ref: "#/components/schemas/CreateJourneyRequest"
+        - type: object
+          properties:
+            id: { type: string }
+            status: { type: string, enum: [PLANNED, ACTIVE, COMPLETED, CANCELLED] }
+            createdAt: { type: string, format: date-time }
+            safety: { $ref: "#/components/schemas/SafetyAnalysis" }
+          required: [id, status, createdAt]
+    SafetyAnalysisRequest:
+      type: object
+      properties:
+        routeId: { type: string }
+        routePoints:
+          type: array
+          items: { $ref: "#/components/schemas/RoutePoint" }
+      required: [routeId, routePoints]
+    SafetyAnalysis:
+      type: object
+      properties:
+        status: { type: string, enum: [PENDING, AVAILABLE, UNAVAILABLE] }
+        score: { type: number, nullable: true }
+        riskLevel: { type: string, enum: [UNKNOWN, LOW, MEDIUM, HIGH] }
+        message: { type: string }
+      required: [status, riskLevel, message]
+    LocationPointRequest:
+      allOf:
+        - $ref: "#/components/schemas/Coordinate"
+        - type: object
+          properties:
+            recordedAt: { type: string, format: date-time }
+            accuracyMeters: { type: number }
+            speedMetersPerSecond: { type: number }
+          required: [recordedAt]
+    LocationPoint:
+      allOf:
+        - $ref: "#/components/schemas/LocationPointRequest"
+        - type: object
+          properties:
+            id: { type: string }
+          required: [id]
+    EmergencyRequest:
+      type: object
+      properties:
+        type: { type: string, enum: [SOS, DEVIATION, STATIONARY] }
+        message: { type: string }
+        coordinate: { $ref: "#/components/schemas/Coordinate" }
+      required: [type, message]
+    EmergencyEvent:
+      allOf:
+        - $ref: "#/components/schemas/EmergencyRequest"
+        - type: object
+          properties:
+            id: { type: string }
+            createdAt: { type: string, format: date-time }
+          required: [id, createdAt]
 

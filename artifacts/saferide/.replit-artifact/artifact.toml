@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/"
+title = "SafeRide"
+description = "A ride-safety mobile app for planning journeys, choosing real routes, analyzing safety, monitoring GPS progress, managing emergency contacts, and triggering SOS support."
+version = "1.0.0"
+id = "artifacts/saferide"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/" ]
+localPort = 24719
+
+[services.development]
+run = "pnpm --filter @workspace/saferide run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/saferide", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/saferide", "run", "serve" ]
+
+[services.env]
+PORT = "24719"
+BASE_PATH = "/"

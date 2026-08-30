@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "SafeRide",
+    "slug": "saferide",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/saferide-icon.png",
+    "scheme": "saferide",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/saferide-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f5f8f6"
+    },
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    },
+    "web": {
+      "favicon": "./assets/images/saferide-icon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://replit.com/"
+        }
+      ],
+      "expo-font",
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

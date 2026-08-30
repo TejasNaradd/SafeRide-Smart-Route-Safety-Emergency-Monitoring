@@ -1,0 +1,1 @@
+- [Generated API compatibility](generated-api-compatibility.md) — keep OpenAPI-generated validators aligned with the workspace's installed Zod major version.
