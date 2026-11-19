@@ -2,7 +2,11 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "baseUrl": ".",
-    "strict": true,
+    "strict": false,
+    "strictNullChecks": true,
+    "noImplicitAny": true,
+    "skipLibCheck": true,
+    "customConditions": ["react-native", "react-native-legacy-deep-imports"],
     "paths": {
       "@/*": [
         "./*"
@@ -12,6 +16,7 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
+    "types/**/*.d.ts",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
   ],

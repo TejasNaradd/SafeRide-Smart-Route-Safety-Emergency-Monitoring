@@ -9,8 +9,11 @@ import type { ContactRequest, EmergencyContact, Journey, User, Vehicle } from "@
 import { useColors } from "@/hooks/useColors";
 import { MapPreview } from "@/components/MapPreview";
 import { ActiveMonitoring, JourneySummaryScreen, type JourneySummaryData } from "@/components/ActiveMonitoring";
+import { JourneyDetailModal } from "@/components/JourneyDetailModal";
 import { calculateRoutes, formatDistance, formatDuration, reverseGeocode, searchLocations, type CandidateRoute, type Place } from "@/lib/geo";
+import { scoreRoutePreTrip, type RoutePreScore } from "@/lib/threat";
 import { clearToken, getToken, saveToken } from "@/lib/session";
+import { ensureLocationPermission, showLocationServicesAlert, showPermissionBlockedAlert } from "@/lib/location";
 
 type Screen = "welcome" | "login" | "register" | "home" | "journey" | "vehicle" | "contacts" | "routes" | "review" | "active" | "summary" | "history" | "profile";
 type Draft = { pickup: Place | null; destination: Place | null; currentLocation: Place | null; routes: CandidateRoute[]; selectedRoute: CandidateRoute | null; vehicle: Vehicle; contactIds: string[]; journeyId: string | null };
@@ -26,6 +29,7 @@ export default function SafeRideApp() {
   const [history, setHistory] = useState<Journey[]>([]);
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
   const [completedSummary, setCompletedSummary] = useState<JourneySummaryData | null>(null);
+  const [selectedJourneyId, setSelectedJourneyId] = useState<string | null>(null);
   const [booting, setBooting] = useState(true);
   useEffect(() => { (async () => { const token = await getToken(); if (token) { try { const me = await getCurrentUser(); setUser(me); setScreen("home"); } catch { await clearToken(); } } setBooting(false); })(); }, []);
   const refreshContacts = async () => { if (!user) return; try { setContacts(await listContacts()); } catch { setContacts([]); } };
@@ -44,13 +48,37 @@ export default function SafeRideApp() {
       case "contacts": return <ContactsStep draft={draft} setDraft={setDraft} contacts={contacts} refresh={refreshContacts} onBack={() => setScreen("vehicle")} onNext={() => setScreen("routes")} />;
       case "routes": return <RoutesStep draft={draft} setDraft={setDraft} onBack={() => setScreen("contacts")} onNext={() => setScreen("review")} />;
       case "review": return <ReviewStep draft={draft} setDraft={setDraft} onBack={() => setScreen("routes")} onStarted={(id) => { setDraft((current) => ({ ...current, journeyId: id })); setScreen("active"); }} />;
-      case "active": return <ActiveMonitoring draft={draft} onEnded={(summary) => { setCompletedSummary(summary); setScreen("summary"); }} />;
+      case "active": {
+        const selectedContacts = contacts.filter((c) => draft.contactIds.includes(c.id));
+        const contactPhones = selectedContacts.map((c) => c.phone);
+        const contactNames = selectedContacts.map((c) => c.name);
+        return (
+          <ActiveMonitoring
+            draft={{
+              ...draft,
+              userName: user?.name,
+              userPhone: user?.email,
+              contactPhones,
+              contactNames,
+            }}
+            onEnded={(summary) => {
+              setCompletedSummary(summary);
+              setScreen("summary");
+            }}
+          />
+        );
+      }
       case "summary": return completedSummary ? <JourneySummaryScreen summary={completedSummary} onDone={() => { setCompletedSummary(null); setDraft(emptyDraft); setScreen("home"); }} /> : <Home user={user!} history={history} onJourney={() => { setDraft(emptyDraft); setScreen("journey"); }} onHistory={async () => { try { setHistory(await listJourneyHistory()); } catch { setHistory([]); } setScreen("history"); }} onContacts={() => setScreen("contacts")} onProfile={() => setScreen("profile")} />;
-      case "history": return <HistoryStep history={history} onBack={() => setScreen("home")} />;
+      case "history": return <HistoryStep history={history} onBack={() => setScreen("home")} onViewJourney={(id) => setSelectedJourneyId(id)} />;
       case "profile": return <ProfileStep user={user!} onBack={() => setScreen("home")} onSignOut={signOut} />;
     }
   })();
-  return <View style={[styles.app, { backgroundColor: colors.background, paddingTop: Platform.OS === "web" ? Math.max(insets.top, 67) : insets.top }]}>{content}</View>;
+  return (
+    <View style={[styles.app, { backgroundColor: colors.background, paddingTop: Platform.OS === "web" ? Math.max(insets.top, 67) : insets.top }]}>
+      {content}
+      <JourneyDetailModal journeyId={selectedJourneyId || ""} visible={!!selectedJourneyId} onClose={() => setSelectedJourneyId(null)} />
+    </View>
+  );
 }
 
 function Welcome({ onLogin, onRegister }: { onLogin: () => void; onRegister: () => void }) {
@@ -71,12 +99,199 @@ function Home({ user, history, onJourney, onHistory, onContacts, onProfile }: { 
 }
 
 function JourneyStep({ draft, setDraft, onBack, onNext }: { draft: Draft; setDraft: React.Dispatch<React.SetStateAction<Draft>>; onBack: () => void; onNext: () => void }) {
-  const colors = useColors(); const [active, setActive] = useState<"pickup" | "destination">("pickup"); const [query, setQuery] = useState(""); const [suggestions, setSuggestions] = useState<Place[]>([]); const [searching, setSearching] = useState(false); const [locating, setLocating] = useState(false); const [error, setError] = useState("");
-  useEffect(() => { if (query.trim().length < 3) { setSuggestions([]); return; } const timer = setTimeout(() => { (async () => { setSearching(true); setError(""); try { setSuggestions(await searchLocations(query.trim())); } catch { setError("Unable to search locations. Please try again."); } finally { setSearching(false); } })(); }, 350); return () => clearTimeout(timer); }, [query]);
-  const choose = (place: Place) => { setDraft((current) => ({ ...current, [active]: place })); setQuery(""); setSuggestions([]); Keyboard.dismiss(); };
-  const locate = async () => { setLocating(true); setError(""); try { const permission = await Location.requestForegroundPermissionsAsync(); if (permission.status !== "granted") throw new Error("permission"); const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }); const place = await reverseGeocode(location.coords.latitude, location.coords.longitude); setDraft((current) => ({ ...current, pickup: place, currentLocation: place })); setActive("destination"); } catch { setError("Unable to get current location. Please try again."); } finally { setLocating(false); } };
+  const colors = useColors();
+  const [active, setActive] = useState<"pickup" | "destination">("pickup");
+  const [pickupInput, setPickupInput] = useState(draft.pickup?.formattedAddress ?? "");
+  const [dropoffInput, setDropoffInput] = useState(draft.destination?.formattedAddress ?? "");
+  const [suggestions, setSuggestions] = useState<Place[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [error, setError] = useState("");
+
+  const activeQuery = active === "pickup" ? pickupInput : dropoffInput;
+
+  useEffect(() => {
+    if (activeQuery.trim().length < 3) {
+      setSuggestions([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      (async () => {
+        setSearching(true);
+        setError("");
+        try {
+          const results = await searchLocations(activeQuery.trim());
+          setSuggestions(results);
+        } catch {
+          setError("Unable to search locations. Please try again.");
+        } finally {
+          setSearching(false);
+        }
+      })();
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [activeQuery, active]);
+
+  const choose = (place: Place) => {
+    if (active === "pickup") {
+      setPickupInput(place.formattedAddress);
+      setDraft((c) => ({ ...c, pickup: place, currentLocation: place }));
+      setActive("destination");
+    } else {
+      setDropoffInput(place.formattedAddress);
+      setDraft((c) => ({ ...c, destination: place }));
+    }
+    setSuggestions([]);
+    Keyboard.dismiss();
+  };
+
+  const locate = async () => {
+    setLocating(true);
+    setError("");
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== "granted") throw new Error("permission");
+      const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const place = await reverseGeocode(location.coords.latitude, location.coords.longitude);
+      setPickupInput(place.formattedAddress);
+      setDraft((current) => ({ ...current, pickup: place, currentLocation: place }));
+      setActive("destination");
+    } catch {
+      setError("Unable to get current location. Please check device GPS.");
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  // 1-Tap Nagpur Demo Ride Preset (RBU -> Railway Station)
+  const loadNagpurDemo = () => {
+    const rbuPlace: Place = {
+      placeId: "nagpur-rbu",
+      name: "Shri Ramdeobaba University (RBU)",
+      formattedAddress: "Ramdeobaba University, Katol Road, Gittikhadan, Nagpur, Maharashtra 440013",
+      latitude: 21.1764,
+      longitude: 79.0612,
+    };
+    const stationPlace: Place = {
+      placeId: "nagpur-railway",
+      name: "Nagpur Railway Station",
+      formattedAddress: "Railway Station Road, Sitabuldi, Nagpur, Maharashtra 440001",
+      latitude: 21.1520,
+      longitude: 79.0820,
+    };
+    setPickupInput(rbuPlace.formattedAddress);
+    setDropoffInput(stationPlace.formattedAddress);
+    setSuggestions([]);
+    setDraft((c) => ({
+      ...c,
+      pickup: rbuPlace,
+      destination: stationPlace,
+      currentLocation: rbuPlace,
+      vehicle: {
+        licensePlate: "MH 31 AB 1234",
+        driverName: "Ramesh Kumar",
+        model: "Toyota Glanza",
+        color: "White",
+      },
+    }));
+  };
+
   const ready = Boolean(draft.pickup && draft.destination);
-  return <KeyboardScroll><TopBar title="Plan a journey" onBack={onBack} step="1 of 5" /><Text style={[styles.pageIntro, { color: colors.mutedForeground }]}>Start with where you are and where you’re going. We’ll find real routes next.</Text><LocationField label="Pickup location" place={draft.pickup} active={active === "pickup"} onPress={() => { setActive("pickup"); setQuery(draft.pickup?.formattedAddress ?? ""); }} /><Pressable onPress={locate} disabled={locating} style={[styles.currentButton, { borderColor: colors.border }]}><Feather name="crosshair" size={17} color={colors.primary} /><Text style={[styles.currentText, { color: colors.primary }]}>{locating ? "Finding your location…" : "Use my current location"}</Text></Pressable><LocationField label="Drop-off location" place={draft.destination} active={active === "destination"} onPress={() => { setActive("destination"); setQuery(draft.destination?.formattedAddress ?? ""); }} /><View style={styles.searchBox}><Feather name="search" size={18} color={colors.mutedForeground} /><TextInput value={query} onChangeText={setQuery} onFocus={() => setActive(draft.destination ? "destination" : active)} placeholder={active === "pickup" ? "Search pickup address…" : "Search destination address…"} placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground }]} autoCorrect={false} /></View>{searching ? <ActivityIndicator color={colors.primary} style={styles.searchLoader} /> : null}{suggestions.length > 0 ? <View style={[styles.suggestions, { backgroundColor: colors.card, borderColor: colors.border }]}>{suggestions.map((place) => <Pressable key={place.placeId} onPress={() => choose(place)} style={[styles.suggestion, { borderBottomColor: colors.border }]}><Feather name="map-pin" size={16} color={colors.primary} /><View style={{ flex: 1 }}><Text style={[styles.suggestionName, { color: colors.foreground }]}>{place.name}</Text><Text numberOfLines={1} style={[styles.suggestionAddress, { color: colors.mutedForeground }]}>{place.formattedAddress}</Text></View></Pressable>)}</View> : null}{error ? <ErrorText text={error} onRetry={() => setQuery(query + " ")} /> : null}<MapPreview pickup={draft.pickup} destination={draft.destination} currentLocation={draft.currentLocation} height={300} /><Button label="Continue to vehicle details" icon="arrow-right" onPress={onNext} disabled={!ready} /></KeyboardScroll>;
+
+  return (
+    <KeyboardScroll>
+      <TopBar title="Plan a journey" onBack={onBack} step="1 of 5" />
+      <Text style={[styles.pageIntro, { color: colors.mutedForeground }]}>
+        Enter your pickup and drop-off locations to calculate scored routes.
+      </Text>
+
+      {/* 1-Tap Nagpur Demo Button for PPT Presentations */}
+      <Pressable
+        onPress={loadNagpurDemo}
+        style={[styles.demoPresetCard, { backgroundColor: colors.secondary, borderColor: colors.primary }]}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Feather name="zap" size={17} color={colors.primary} />
+          <Text style={[styles.demoPresetTitle, { color: colors.primary }]}>⚡ 1-Tap Demo: RBU ➔ Railway Station</Text>
+        </View>
+        <Text style={[styles.demoPresetSubtitle, { color: colors.mutedForeground }]}>
+          Auto-fills Ramdeobaba Univ ➔ Nagpur Station with vehicle info for live demo.
+        </Text>
+      </Pressable>
+
+      {/* Direct Pickup Input Card */}
+      <View style={[styles.directInputCard, { backgroundColor: colors.card, borderColor: active === "pickup" ? colors.primary : colors.border }]}>
+        <View style={[styles.locationDot, { backgroundColor: colors.primary }]} />
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Pickup Location</Text>
+          <TextInput
+            value={pickupInput}
+            onChangeText={(t) => {
+              setPickupInput(t);
+              setActive("pickup");
+            }}
+            onFocus={() => setActive("pickup")}
+            placeholder="Type pickup address in Nagpur..."
+            placeholderTextColor={colors.mutedForeground}
+            style={[styles.directTextInput, { color: colors.foreground }]}
+            autoCorrect={false}
+          />
+        </View>
+        <Pressable onPress={locate} disabled={locating} hitSlop={10} style={{ padding: 4 }}>
+          {locating ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Feather name="crosshair" size={19} color={colors.primary} />
+          )}
+        </Pressable>
+      </View>
+
+      {/* Direct Drop-off Input Card */}
+      <View style={[styles.directInputCard, { backgroundColor: colors.card, borderColor: active === "destination" ? colors.primary : colors.border }]}>
+        <View style={[styles.locationDot, { backgroundColor: "#dc2626" }]} />
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Drop-off Location</Text>
+          <TextInput
+            value={dropoffInput}
+            onChangeText={(t) => {
+              setDropoffInput(t);
+              setActive("destination");
+            }}
+            onFocus={() => setActive("destination")}
+            placeholder="Type destination address..."
+            placeholderTextColor={colors.mutedForeground}
+            style={[styles.directTextInput, { color: colors.foreground }]}
+            autoCorrect={false}
+          />
+        </View>
+      </View>
+
+      {/* Dropdown Suggestions under active input */}
+      {searching ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12 }}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: colors.mutedForeground }}>Searching locations…</Text>
+        </View>
+      ) : null}
+
+      {suggestions.length > 0 ? (
+        <View style={[styles.suggestions, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          {suggestions.map((place) => (
+            <Pressable key={place.placeId} onPress={() => choose(place)} style={[styles.suggestion, { borderBottomColor: colors.border }]}>
+              <Feather name="map-pin" size={16} color={colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.suggestionName, { color: colors.foreground }]}>{place.name}</Text>
+                <Text numberOfLines={1} style={[styles.suggestionAddress, { color: colors.mutedForeground }]}>{place.formattedAddress}</Text>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
+      {error ? <ErrorText text={error} /> : null}
+      <Button label="Continue to vehicle details" icon="arrow-right" onPress={onNext} disabled={!ready} />
+    </KeyboardScroll>
+  );
 }
 
 function VehicleStep({ draft, setDraft, onBack, onNext }: { draft: Draft; setDraft: React.Dispatch<React.SetStateAction<Draft>>; onBack: () => void; onNext: () => void }) {
@@ -94,16 +309,196 @@ function ContactsStep({ draft, setDraft, contacts, refresh, onBack, onNext }: { 
 }
 
 function RoutesStep({ draft, setDraft, onBack, onNext }: { draft: Draft; setDraft: React.Dispatch<React.SetStateAction<Draft>>; onBack: () => void; onNext: () => void }) {
-  const colors = useColors(); const [calculating, setCalculating] = useState(draft.routes.length === 0); const [error, setError] = useState("");
-  const calculate = async () => { if (!draft.pickup || !draft.destination) return; setCalculating(true); setError(""); try { const routes = await calculateRoutes(draft.pickup, draft.destination); setDraft((current) => ({ ...current, routes, selectedRoute: routes[0] })); } catch { setError("Unable to calculate routes. Please try again."); } finally { setCalculating(false); } };
+  const colors = useColors();
+  const [calculating, setCalculating] = useState(draft.routes.length === 0);
+  const [scoring, setScoring] = useState(false);
+  const [scores, setScores] = useState<Record<string, RoutePreScore>>({});
+  const [error, setError] = useState("");
+
+  const calculate = async () => {
+    if (!draft.pickup || !draft.destination) return;
+    setCalculating(true); setError("");
+    try {
+      const routes = await calculateRoutes(draft.pickup, draft.destination);
+      setDraft((c) => ({ ...c, routes, selectedRoute: routes[0] }));
+      // Score all routes using Nagpur spatial engine (A1)
+      setScoring(true);
+      const scored: Record<string, RoutePreScore> = {};
+      for (const r of routes) {
+        scored[r.routeId] = scoreRoutePreTrip(r.routeId, r.points.map(p => ({ latitude: p.latitude, longitude: p.longitude })));
+      }
+      setScores(scored);
+      // Auto-select safest route
+      const safest = routes.reduce((best, r) =>
+        (scored[r.routeId]?.safetyScore ?? 0) > (scored[best.routeId]?.safetyScore ?? 0) ? r : best, routes[0]);
+      setDraft((c) => ({ ...c, selectedRoute: safest }));
+    } catch { setError("Unable to calculate routes. Please try again."); }
+    finally { setCalculating(false); setScoring(false); }
+  };
+
   useEffect(() => { if (draft.routes.length === 0) calculate(); }, []);
-  return <KeyboardScroll><TopBar title="Choose a route" onBack={onBack} step="4 of 5" /><Text style={styles.pageIntro}>Routes come directly from OpenStreetMap routing. SafeRide safety analysis stays separate and transparent.</Text><MapPreview pickup={draft.pickup} destination={draft.destination} routes={draft.routes} selectedRouteId={draft.selectedRoute?.routeId} height={360} />{calculating ? <View style={styles.loadingRow}><ActivityIndicator color={colors.primary} /><Text style={[styles.loadingText, { color: colors.mutedForeground }]}>Calculating real routes…</Text></View> : error ? <View><ErrorText text={error} onRetry={calculate} /></View> : draft.routes.map((route, index) => <Pressable key={route.routeId} onPress={() => setDraft((current) => ({ ...current, selectedRoute: route }))} style={[styles.routeCard, { backgroundColor: colors.card, borderColor: draft.selectedRoute?.routeId === route.routeId ? colors.primary : colors.border }]}><View style={[styles.routeNumber, { backgroundColor: draft.selectedRoute?.routeId === route.routeId ? colors.primary : colors.secondary }]}><Text style={{ color: draft.selectedRoute?.routeId === route.routeId ? colors.primaryForeground : colors.primary, fontFamily: "Inter_700Bold" }}>{index + 1}</Text></View><View style={{ flex: 1 }}><Text style={[styles.routeTitle, { color: colors.foreground }]}>{index === 0 ? "Fastest available" : `Alternative route ${index}`}</Text><Text style={[styles.routeMeta, { color: colors.mutedForeground }]}>{formatDistance(route.distance)} · {formatDuration(route.duration)}{route.traffic ? ` · ${route.traffic}` : ""}</Text><Text style={[styles.pendingText, { color: colors.mutedForeground }]}><Feather name="info" size={12} /> Safety score pending</Text></View>{draft.selectedRoute?.routeId === route.routeId ? <Feather name="check-circle" size={23} color={colors.primary} /> : null}</Pressable>)}<Button label="Review selected route" icon="arrow-right" onPress={onNext} disabled={calculating || !draft.selectedRoute} /></KeyboardScroll>;
+
+  const riskColor = (sc?: RoutePreScore) => {
+    if (!sc) return colors.mutedForeground;
+    if (sc.riskLabel === "SAFE") return "#276749";
+    if (sc.riskLabel === "MODERATE") return "#c05621";
+    return colors.destructive;
+  };
+
+  return (
+    <KeyboardScroll>
+      <TopBar title="Choose a route" onBack={onBack} step="4 of 5" />
+      <Text style={[styles.pageIntro, { color: colors.mutedForeground }]}>
+        Choose your preferred route. SafeRide analyzes lighting, CCTV coverage, and police presence along every path.
+      </Text>
+      <MapPreview pickup={draft.pickup} destination={draft.destination} routes={draft.routes} selectedRouteId={draft.selectedRoute?.routeId} height={300} />
+      {calculating ? (
+        <View style={styles.loadingRow}><ActivityIndicator color={colors.primary} /><Text style={[styles.loadingText, { color: colors.mutedForeground }]}>Calculating routes…</Text></View>
+      ) : scoring ? (
+        <View style={styles.loadingRow}><ActivityIndicator color={colors.primary} /><Text style={[styles.loadingText, { color: colors.mutedForeground }]}>Analyzing route safety…</Text></View>
+      ) : error ? (
+        <ErrorText text={error} onRetry={calculate} />
+      ) : (
+        draft.routes.map((route, index) => {
+          const sc = scores[route.routeId];
+          const selected = draft.selectedRoute?.routeId === route.routeId;
+          const rc = riskColor(sc);
+          return (
+            <Pressable
+              key={route.routeId}
+              onPress={() => setDraft((c) => ({ ...c, selectedRoute: route }))}
+              style={[styles.routeCard, { backgroundColor: colors.card, borderColor: selected ? colors.primary : colors.border, borderWidth: selected ? 2 : 1 }]}
+            >
+              {/* Route number */}
+              <View style={[styles.routeNumber, { backgroundColor: selected ? colors.primary : colors.secondary }]}>
+                <Text style={{ color: selected ? colors.primaryForeground : colors.primary, fontFamily: "Inter_700Bold", fontSize: 14 }}>{index + 1}</Text>
+              </View>
+              <View style={{ flex: 1, gap: 4 }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <Text style={[styles.routeTitle, { color: colors.foreground, flex: 1 }]} numberOfLines={2}>
+                    {route.routeName ?? (sc?.riskLabel === "SAFE" ? "🛡 Safest Option" : index === 0 ? "Fastest Available" : `Alternative Route ${index}`)}
+                  </Text>
+                  {sc && (
+                    <View style={{ backgroundColor: rc + "18", borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3, marginLeft: 6 }}>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: rc }}>{sc.safetyScore}/100</Text>
+                    </View>
+                  )}
+                </View>
+                {route.viaSummary && (
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, lineHeight: 15 }} numberOfLines={2}>
+                    📍 {route.viaSummary}
+                  </Text>
+                )}
+                <Text style={[styles.routeMeta, { color: colors.mutedForeground }]}>
+                  {formatDistance(route.distance)} · {formatDuration(route.duration)}
+                </Text>
+                {sc ? (
+                  <>
+                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: rc }}>
+                      {sc.riskLabel.replace("_", " ")} · {sc.explanation}
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 8, marginTop: 2 }}>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: colors.mutedForeground }}>💡 {sc.lightingPct}% lit</Text>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: colors.mutedForeground }}>📷 {sc.cctvPct}% CCTV</Text>
+                      {sc.blackspotCount > 0 && <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: colors.destructive }}>⚠ {sc.blackspotCount} blackspot{sc.blackspotCount > 1 ? "s" : ""}</Text>}
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: colors.mutedForeground }}>🚔 {sc.nearestPoliceM < 1000 ? `${sc.nearestPoliceM}m` : `${(sc.nearestPoliceM / 1000).toFixed(1)}km`} police</Text>
+                    </View>
+                  </>
+                ) : (
+                  <Text style={[styles.pendingText, { color: colors.mutedForeground }]}>Scoring…</Text>
+                )}
+              </View>
+              {selected && <Feather name="check-circle" size={22} color={colors.primary} />}
+            </Pressable>
+          );
+        })
+      )}
+      <Button label="Review selected route" icon="arrow-right" onPress={onNext} disabled={calculating || scoring || !draft.selectedRoute} />
+    </KeyboardScroll>
+  );
 }
 
 function ReviewStep({ draft, setDraft, onBack, onStarted }: { draft: Draft; setDraft: React.Dispatch<React.SetStateAction<Draft>>; onBack: () => void; onStarted: (id: string) => void }) {
-  const colors = useColors(); const [busy, setBusy] = useState(false); const [error, setError] = useState("");
-  const start = async () => { if (!draft.pickup || !draft.destination || !draft.selectedRoute) return; setBusy(true); setError(""); try { const result = await createJourney({ pickup: draft.pickup.formattedAddress, destination: draft.destination.formattedAddress, pickupPlaceId: draft.pickup.placeId, destinationPlaceId: draft.destination.placeId, pickupCoordinate: draft.pickup, destinationCoordinate: draft.destination, selectedRouteId: draft.selectedRoute.routeId, routeDistanceMeters: draft.selectedRoute.distance, routeDurationSeconds: draft.selectedRoute.duration, routePoints: draft.selectedRoute.points, vehicle: draft.vehicle, contactIds: draft.contactIds }); onStarted(result.id); } catch { setError("SafeRide services are temporarily unavailable. Please try again."); } finally { setBusy(false); } };
-  return <KeyboardScroll><TopBar title="Review journey" onBack={onBack} step="5 of 5" /><Text style={styles.pageIntro}>Everything looks ready. Your route remains visible while SafeRide stores the journey.</Text><MapPreview pickup={draft.pickup} destination={draft.destination} routes={draft.routes} selectedRouteId={draft.selectedRoute?.routeId} height={280} /><View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}><SummaryRow icon="map-pin" label="Pickup" value={draft.pickup?.formattedAddress ?? ""} /><SummaryRow icon="flag" label="Drop-off" value={draft.destination?.formattedAddress ?? ""} /><SummaryRow icon="clock" label="Selected route" value={draft.selectedRoute ? `${formatDistance(draft.selectedRoute.distance)} · ${formatDuration(draft.selectedRoute.duration)}` : ""} /><SummaryRow icon="shield" label="Safety analysis" value="Pending — no score invented" last /></View>{error ? <ErrorText text={error} /> : null}<Button label={busy ? "Starting journey…" : "Create & start journey"} icon="play" onPress={start} disabled={busy} /></KeyboardScroll>;
+  const colors = useColors();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const start = async () => {
+    if (!draft.pickup || !draft.destination || !draft.selectedRoute) return;
+    setBusy(true);
+    setError("");
+
+    try {
+      // ── Strict Pre-Ride GPS Gate ──
+      const permResult = await ensureLocationPermission();
+      if (permResult.status === "SERVICES_DISABLED") {
+        showLocationServicesAlert();
+        setBusy(false);
+        return;
+      }
+      if (permResult.status === "BLOCKED" || permResult.status === "DENIED") {
+        showPermissionBlockedAlert();
+        setBusy(false);
+        return;
+      }
+
+      // Try capturing real current position as starting coordinate
+      try {
+        const liveLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        setDraft((c) => ({
+          ...c,
+          currentLocation: {
+            placeId: "current",
+            name: "Current location",
+            formattedAddress: "Live GPS start",
+            latitude: liveLoc.coords.latitude,
+            longitude: liveLoc.coords.longitude,
+          },
+        }));
+      } catch {
+        // Fallback to pickup coordinate
+      }
+
+      const result = await createJourney({
+        pickup: draft.pickup.formattedAddress,
+        destination: draft.destination.formattedAddress,
+        pickupPlaceId: draft.pickup.placeId,
+        destinationPlaceId: draft.destination.placeId,
+        pickupCoordinate: draft.pickup,
+        destinationCoordinate: draft.destination,
+        selectedRouteId: draft.selectedRoute.routeId,
+        routeDistanceMeters: draft.selectedRoute.distance,
+        routeDurationSeconds: draft.selectedRoute.duration,
+        routePoints: draft.selectedRoute.points,
+        vehicle: draft.vehicle,
+        contactIds: draft.contactIds,
+      });
+
+      onStarted(result.id);
+    } catch {
+      setError("SafeRide services are temporarily unavailable. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <KeyboardScroll>
+      <TopBar title="Review journey" onBack={onBack} step="5 of 5" />
+      <Text style={styles.pageIntro}>
+        Everything looks ready. Active GPS tracking and real-time safety monitoring will begin.
+      </Text>
+      <MapPreview pickup={draft.pickup} destination={draft.destination} routes={draft.routes} selectedRouteId={draft.selectedRoute?.routeId} height={280} />
+      <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <SummaryRow icon="map-pin" label="Pickup" value={draft.pickup?.formattedAddress ?? ""} />
+        <SummaryRow icon="flag" label="Drop-off" value={draft.destination?.formattedAddress ?? ""} />
+        <SummaryRow icon="clock" label="Selected route" value={draft.selectedRoute ? `${formatDistance(draft.selectedRoute.distance)} · ${formatDuration(draft.selectedRoute.duration)}` : ""} />
+        <SummaryRow icon="shield" label="Safety protection" value="Continuous Live Safety Monitoring Active" last />
+      </View>
+      {error ? <ErrorText text={error} /> : null}
+      <Button label={busy ? "Checking GPS & starting…" : "Create & start journey"} icon="play" onPress={start} disabled={busy} />
+    </KeyboardScroll>
+  );
 }
 
 function ActiveStep({ draft, onBack }: { draft: Draft; onBack: () => void }) {
@@ -114,7 +509,45 @@ function ActiveStep({ draft, onBack }: { draft: Draft; onBack: () => void }) {
   return <KeyboardScroll><TopBar title="Active journey" onBack={onBack} /><View style={[styles.activeBadge, { backgroundColor: colors.secondary }]}><View style={[styles.liveDot, { backgroundColor: colors.primary }]} /><Text style={[styles.activeBadgeText, { color: colors.primary }]}>{sending ? "Updating GPS…" : "Journey active"}</Text></View><MapPreview pickup={draft.pickup} destination={draft.destination} currentLocation={current} routes={draft.routes} selectedRouteId={draft.selectedRoute?.routeId} height={330} /><View style={styles.activeStats}><Stat label="Elapsed" value={`${Math.floor(elapsed / 60).toString().padStart(2, "0")}:${(elapsed % 60).toString().padStart(2, "0")}`} /><Stat label="Distance" value={draft.selectedRoute ? formatDistance(draft.selectedRoute.distance) : "—"} /><Stat label="Safety" value="Pending" /></View><View style={[styles.safetyNotice, { backgroundColor: colors.accent }]}><Feather name="shield" size={19} color={colors.primary} /><Text style={[styles.safetyNoticeText, { color: colors.accentForeground }]}>Safety analysis is pending. Your GPS updates are still being monitored and stored.</Text></View><Pressable onPress={sos} disabled={sosBusy} style={[styles.sosButton, { backgroundColor: colors.destructive }]}><Feather name="alert-triangle" size={20} color={colors.destructiveForeground} /><Text style={[styles.sosText, { color: colors.destructiveForeground }]}>{sosBusy ? "Sending…" : "Emergency SOS"}</Text></Pressable></KeyboardScroll>;
 }
 
-function HistoryStep({ history, onBack }: { history: Journey[]; onBack: () => void }) { const colors = useColors(); return <KeyboardScroll><TopBar title="Journey history" onBack={onBack} />{history.length === 0 ? <Empty icon="clock" title="No journeys yet" body="Your completed journeys will appear here." /> : history.map((journey) => <View key={journey.id} style={[styles.historyCard, { backgroundColor: colors.card, borderColor: colors.border }]}><View style={styles.historyHeader}><Text style={[styles.historyDate, { color: colors.foreground }]}>{new Date(journey.createdAt).toLocaleDateString()}</Text><Text style={[styles.status, { color: colors.primary }]}>{journey.status}</Text></View><Text numberOfLines={1} style={[styles.historyRoute, { color: colors.foreground }]}>{journey.pickup} → {journey.destination}</Text><Text style={[styles.routeMeta, { color: colors.mutedForeground }]}>{formatDistance(journey.routeDistanceMeters)} · {formatDuration(journey.routeDurationSeconds)}</Text></View>)}</KeyboardScroll>; }
+function HistoryStep({ history, onBack, onViewJourney }: { history: Journey[]; onBack: () => void; onViewJourney: (id: string) => void }) { 
+  const colors = useColors(); 
+  return (
+    <KeyboardScroll>
+      <TopBar title="Journey history" onBack={onBack} />
+      {history.length === 0 ? (
+        <Empty icon="clock" title="No journeys yet" body="Your completed journeys will appear here." />
+      ) : (
+        history.map((journey) => (
+          <Pressable 
+            key={journey.id} 
+            onPress={() => onViewJourney(journey.id)}
+            style={({ pressed }) => [
+              styles.historyCard, 
+              { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.7 : 1 }
+            ]}
+          >
+            <View style={styles.historyHeader}>
+              <Text style={[styles.historyDate, { color: colors.foreground }]}>
+                {new Date(journey.createdAt).toLocaleDateString()}
+              </Text>
+              <Text style={[styles.status, { color: colors.primary }]}>{journey.status}</Text>
+            </View>
+            <Text numberOfLines={1} style={[styles.historyRoute, { color: colors.foreground }]}>
+              {journey.pickup} → {journey.destination}
+            </Text>
+            <Text style={[styles.routeMeta, { color: colors.mutedForeground }]}>
+              {formatDistance(journey.routeDistanceMeters)} · {formatDuration(journey.routeDurationSeconds)}
+            </Text>
+            <View style={[styles.viewDetailRow, { borderTopColor: colors.border }]}>
+              <Feather name="arrow-right" size={16} color={colors.primary} />
+              <Text style={[styles.viewDetailText, { color: colors.primary }]}>View details</Text>
+            </View>
+          </Pressable>
+        ))
+      )}
+    </KeyboardScroll>
+  );
+}
 function ProfileStep({ user, onBack, onSignOut }: { user: User; onBack: () => void; onSignOut: () => void }) { const colors = useColors(); return <KeyboardScroll><TopBar title="Profile" onBack={onBack} /><View style={[styles.profileHero, { backgroundColor: colors.secondary }]}><View style={[styles.profileAvatar, { backgroundColor: colors.primary }]}><Text style={[styles.profileAvatarText, { color: colors.primaryForeground }]}>{user.name.charAt(0).toUpperCase()}</Text></View><Text style={[styles.profileName, { color: colors.foreground }]}>{user.name}</Text><Text style={[styles.contactMeta, { color: colors.mutedForeground }]}>{user.email}</Text></View><View style={[styles.profileRow, { borderBottomColor: colors.border }]}><Feather name="shield" size={18} color={colors.primary} /><Text style={[styles.profileRowText, { color: colors.foreground }]}>SafeRide account protected</Text></View><View style={[styles.profileRow, { borderBottomColor: colors.border }]}><Feather name="map" size={18} color={colors.primary} /><Text style={[styles.profileRowText, { color: colors.foreground }]}>Real maps and routes enabled</Text></View><Button label="Sign out" variant="secondary" onPress={onSignOut} /></KeyboardScroll>; }
 
 function TopBar({ title, onBack, step }: { title: string; onBack: () => void; step?: string }) { const colors = useColors(); return <View style={styles.topBar}><Pressable onPress={onBack} hitSlop={12} style={styles.backButton}><Feather name="arrow-left" size={21} color={colors.foreground} /></Pressable><View style={{ flex: 1 }}><Text style={[styles.topTitle, { color: colors.foreground }]}>{title}</Text>{step ? <Text style={[styles.topStep, { color: colors.mutedForeground }]}>{step}</Text> : null}</View><View style={[styles.topMark, { backgroundColor: colors.secondary }]}><Feather name="shield" size={16} color={colors.primary} /></View></View>; }
@@ -129,5 +562,7 @@ function SummaryRow({ icon, label, value, last }: { icon: keyof typeof Feather.g
 function Stat({ label, value }: { label: string; value: string }) { const colors = useColors(); return <View style={styles.stat}><Text style={[styles.statValue, { color: colors.foreground }]}>{value}</Text><Text style={[styles.statLabel, { color: colors.mutedForeground }]}>{label}</Text></View>; }
 
 const styles = StyleSheet.create({
-  app: { flex: 1 }, center: { flex: 1, alignItems: "center", justifyContent: "center" }, scroll: { paddingHorizontal: 20, gap: 16 }, welcome: { flex: 1, alignItems: "center", justifyContent: "center", padding: 28 }, logo: { width: 76, height: 76, borderRadius: 24, alignItems: "center", justifyContent: "center", marginBottom: 18 }, brand: { fontFamily: "Inter_700Bold", fontSize: 24 }, hero: { fontFamily: "Inter_700Bold", fontSize: 34, lineHeight: 40, textAlign: "center", marginTop: 28, maxWidth: 340 }, subtle: { fontFamily: "Inter_400Regular", fontSize: 15, lineHeight: 23, textAlign: "center", marginTop: 16, maxWidth: 330 }, authButtons: { width: "100%", gap: 10, marginTop: 34 }, trust: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 26 }, trustText: { fontFamily: "Inter_400Regular", fontSize: 12 }, topBar: { flexDirection: "row", alignItems: "center", gap: 13, marginBottom: 6 }, backButton: { width: 38, height: 38, alignItems: "center", justifyContent: "center" }, topTitle: { fontFamily: "Inter_700Bold", fontSize: 24 }, topStep: { fontFamily: "Inter_500Medium", fontSize: 12, marginTop: 2 }, topMark: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" }, pageIntro: { fontFamily: "Inter_400Regular", fontSize: 14, lineHeight: 21, marginBottom: 5 }, button: { minHeight: 54, borderRadius: 16, borderWidth: 1, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 }, buttonLabel: { fontFamily: "Inter_600SemiBold", fontSize: 15 }, textButton: { alignItems: "center", padding: 7 }, link: { fontFamily: "Inter_600SemiBold", fontSize: 13 }, field: { gap: 8 }, fieldLabel: { fontFamily: "Inter_600SemiBold", fontSize: 13 }, inputRow: { borderWidth: 1, borderRadius: 14, minHeight: 54, paddingHorizontal: 15, flexDirection: "row", alignItems: "center", gap: 10 }, fieldInput: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 15, paddingVertical: 10 }, searchBox: { borderWidth: 1, borderRadius: 14, minHeight: 54, paddingHorizontal: 15, flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "transparent" }, input: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 15 }, searchLoader: { marginTop: -6, alignSelf: "flex-start" }, suggestions: { borderWidth: 1, borderRadius: 14, overflow: "hidden", marginTop: -8, zIndex: 3 }, suggestion: { flexDirection: "row", alignItems: "center", gap: 11, padding: 14, borderBottomWidth: 1 }, suggestionName: { fontFamily: "Inter_600SemiBold", fontSize: 14 }, suggestionAddress: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 }, locationField: { minHeight: 67, borderWidth: 1, borderRadius: 14, paddingHorizontal: 15, flexDirection: "row", alignItems: "center", gap: 12 }, locationDot: { width: 11, height: 11, borderRadius: 6 }, locationText: { fontFamily: "Inter_500Medium", fontSize: 14, marginTop: 3 }, currentButton: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 2, alignSelf: "flex-start" }, currentText: { fontFamily: "Inter_600SemiBold", fontSize: 13 }, errorBox: { borderWidth: 1, borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "center", gap: 8 }, errorText: { flex: 1, fontFamily: "Inter_500Medium", fontSize: 13, lineHeight: 18 }, retry: { fontFamily: "Inter_700Bold", fontSize: 12 }, homeHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }, eyebrow: { fontFamily: "Inter_700Bold", fontSize: 11, letterSpacing: 1.2 }, title: { fontFamily: "Inter_700Bold", fontSize: 26, marginTop: 7 }, avatar: { width: 42, height: 42, borderRadius: 15, alignItems: "center", justifyContent: "center" }, avatarText: { fontFamily: "Inter_700Bold", fontSize: 17 }, welcomeCard: { minHeight: 168, borderRadius: 24, padding: 21, flexDirection: "row", alignItems: "center", overflow: "hidden" }, cardEyebrow: { fontFamily: "Inter_700Bold", fontSize: 10, letterSpacing: 1 }, cardTitle: { fontFamily: "Inter_700Bold", fontSize: 23, lineHeight: 28, marginTop: 10, maxWidth: 220 }, cardBody: { fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 18, marginTop: 8, maxWidth: 230, opacity: 0.86 }, sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 17, marginTop: 7 }, toolGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 }, tool: { width: "48%", minHeight: 104, borderWidth: 1, borderRadius: 17, padding: 15, justifyContent: "space-between" }, toolLabel: { fontFamily: "Inter_600SemiBold", fontSize: 13, lineHeight: 18, maxWidth: 120 }, smallNote: { fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 18, marginTop: 5 }, contactRow: { borderWidth: 1, borderRadius: 16, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 }, contactIcon: { width: 37, height: 37, borderRadius: 13, alignItems: "center", justifyContent: "center" }, contactName: { fontFamily: "Inter_600SemiBold", fontSize: 14 }, contactMeta: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 4 }, addContact: { minHeight: 48, borderWidth: 1, borderStyle: "dashed", borderRadius: 14, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 }, addContactText: { fontFamily: "Inter_600SemiBold", fontSize: 13 }, modalShade: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(21,36,29,0.42)" }, modalCard: { maxHeight: "88%", borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingTop: 22 }, modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, loadingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, padding: 14 }, loadingText: { fontFamily: "Inter_500Medium", fontSize: 13 }, routeCard: { borderWidth: 1, borderRadius: 17, padding: 14, flexDirection: "row", alignItems: "center", gap: 12 }, routeNumber: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" }, routeTitle: { fontFamily: "Inter_600SemiBold", fontSize: 14 }, routeMeta: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 4 }, pendingText: { fontFamily: "Inter_500Medium", fontSize: 11, marginTop: 8 }, summaryCard: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 15 }, summaryRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14 }, summaryLabel: { fontFamily: "Inter_500Medium", fontSize: 11 }, summaryValue: { fontFamily: "Inter_600SemiBold", fontSize: 13, marginTop: 3 }, activeBadge: { alignSelf: "flex-start", borderRadius: 30, paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 7 }, liveDot: { width: 8, height: 8, borderRadius: 4 }, activeBadgeText: { fontFamily: "Inter_700Bold", fontSize: 12 }, activeStats: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 14 }, stat: { alignItems: "center", flex: 1 }, statValue: { fontFamily: "Inter_700Bold", fontSize: 18 }, statLabel: { fontFamily: "Inter_400Regular", fontSize: 11, marginTop: 3 }, safetyNotice: { borderRadius: 15, padding: 13, flexDirection: "row", gap: 9, alignItems: "center" }, safetyNoticeText: { flex: 1, fontFamily: "Inter_500Medium", fontSize: 12, lineHeight: 17 }, sosButton: { minHeight: 56, borderRadius: 17, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 }, sosText: { fontFamily: "Inter_700Bold", fontSize: 15 }, historyCard: { borderWidth: 1, borderRadius: 17, padding: 15, gap: 7 }, historyHeader: { flexDirection: "row", justifyContent: "space-between" }, historyDate: { fontFamily: "Inter_600SemiBold", fontSize: 13 }, status: { fontFamily: "Inter_700Bold", fontSize: 10, letterSpacing: 0.6 }, historyRoute: { fontFamily: "Inter_600SemiBold", fontSize: 14 }, profileHero: { alignItems: "center", padding: 25, borderRadius: 21 }, profileAvatar: { width: 66, height: 66, borderRadius: 22, alignItems: "center", justifyContent: "center" }, profileAvatarText: { fontFamily: "Inter_700Bold", fontSize: 28 }, profileName: { fontFamily: "Inter_700Bold", fontSize: 21, marginTop: 12 }, profileRow: { flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 16, borderBottomWidth: 1 }, profileRowText: { fontFamily: "Inter_500Medium", fontSize: 14 }, emptyState: { alignItems: "center", borderRadius: 18, padding: 28, marginTop: 10 }, emptyTitle: { fontFamily: "Inter_600SemiBold", fontSize: 15, marginTop: 12 }, emptyText: { fontFamily: "Inter_400Regular", fontSize: 13, textAlign: "center", lineHeight: 20, marginTop: 7, maxWidth: 280 },
+  app: { flex: 1 }, center: { flex: 1, alignItems: "center", justifyContent: "center" }, scroll: { paddingHorizontal: 20, gap: 16 }, welcome: { flex: 1, alignItems: "center", justifyContent: "center", padding: 28 }, logo: { width: 76, height: 76, borderRadius: 24, alignItems: "center", justifyContent: "center", marginBottom: 18 }, brand: { fontFamily: "Inter_700Bold", fontSize: 24 }, hero: { fontFamily: "Inter_700Bold", fontSize: 34, lineHeight: 40, textAlign: "center", marginTop: 28, maxWidth: 340 }, subtle: { fontFamily: "Inter_400Regular", fontSize: 15, lineHeight: 23, textAlign: "center", marginTop: 16, maxWidth: 330 }, authButtons: { width: "100%", gap: 10, marginTop: 34 }, trust: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 26 }, trustText: { fontFamily: "Inter_400Regular", fontSize: 12 }, topBar: { flexDirection: "row", alignItems: "center", gap: 13, marginBottom: 6 }, backButton: { width: 38, height: 38, alignItems: "center", justifyContent: "center" }, topTitle: { fontFamily: "Inter_700Bold", fontSize: 24 }, topStep: { fontFamily: "Inter_500Medium", fontSize: 12, marginTop: 2 }, topMark: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" }, pageIntro: { fontFamily: "Inter_400Regular", fontSize: 14, lineHeight: 21, marginBottom: 5 }, demoPresetCard: { borderWidth: 1.5, borderRadius: 15, padding: 14, gap: 5, marginBottom: 8 }, demoPresetTitle: { fontFamily: "Inter_700Bold", fontSize: 14 }, demoPresetSubtitle: { fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 17 }, directInputCard: { minHeight: 70, borderWidth: 1.5, borderRadius: 16, paddingHorizontal: 15, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 8 }, directTextInput: { fontFamily: "Inter_500Medium", fontSize: 14, marginTop: 3, paddingVertical: 4 }, button: { minHeight: 54, borderRadius: 16, borderWidth: 1, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 }, buttonLabel: { fontFamily: "Inter_600SemiBold", fontSize: 15 }, textButton: { alignItems: "center", padding: 7 }, link: { fontFamily: "Inter_600SemiBold", fontSize: 13 }, field: { gap: 8 }, fieldLabel: { fontFamily: "Inter_600SemiBold", fontSize: 13 }, inputRow: { borderWidth: 1, borderRadius: 14, minHeight: 54, paddingHorizontal: 15, flexDirection: "row", alignItems: "center", gap: 10 }, fieldInput: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 15, paddingVertical: 10 }, searchBox: { borderWidth: 1, borderRadius: 14, minHeight: 54, paddingHorizontal: 15, flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "transparent" }, input: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 15 }, searchLoader: { marginTop: -6, alignSelf: "flex-start" }, suggestions: { borderWidth: 1, borderRadius: 14, overflow: "hidden", marginTop: -8, zIndex: 3 }, suggestion: { flexDirection: "row", alignItems: "center", gap: 11, padding: 14, borderBottomWidth: 1 }, suggestionName: { fontFamily: "Inter_600SemiBold", fontSize: 14 }, suggestionAddress: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 }, locationField: { minHeight: 67, borderWidth: 1, borderRadius: 14, paddingHorizontal: 15, flexDirection: "row", alignItems: "center", gap: 12 }, locationDot: { width: 11, height: 11, borderRadius: 6 }, locationText: { fontFamily: "Inter_500Medium", fontSize: 14, marginTop: 3 }, currentButton: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 2, alignSelf: "flex-start" }, currentText: { fontFamily: "Inter_600SemiBold", fontSize: 13 }, errorBox: { borderWidth: 1, borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "center", gap: 8 }, errorText: { flex: 1, fontFamily: "Inter_500Medium", fontSize: 13, lineHeight: 18 }, retry: { fontFamily: "Inter_700Bold", fontSize: 12 }, homeHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }, eyebrow: { fontFamily: "Inter_700Bold", fontSize: 11, letterSpacing: 1.2 }, title: { fontFamily: "Inter_700Bold", fontSize: 26, marginTop: 7 }, avatar: { width: 42, height: 42, borderRadius: 15, alignItems: "center", justifyContent: "center" }, avatarText: { fontFamily: "Inter_700Bold", fontSize: 17 }, welcomeCard: { minHeight: 168, borderRadius: 24, padding: 21, flexDirection: "row", alignItems: "center", overflow: "hidden" }, cardEyebrow: { fontFamily: "Inter_700Bold", fontSize: 10, letterSpacing: 1 }, cardTitle: { fontFamily: "Inter_700Bold", fontSize: 23, lineHeight: 28, marginTop: 10, maxWidth: 220 }, cardBody: { fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 18, marginTop: 8, maxWidth: 230, opacity: 0.86 }, sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 17, marginTop: 7 }, toolGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 }, tool: { width: "48%", minHeight: 104, borderWidth: 1, borderRadius: 17, padding: 15, justifyContent: "space-between" }, toolLabel: { fontFamily: "Inter_600SemiBold", fontSize: 13, lineHeight: 18, maxWidth: 120 }, smallNote: { fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 18, marginTop: 5 }, contactRow: { borderWidth: 1, borderRadius: 16, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 }, contactIcon: { width: 37, height: 37, borderRadius: 13, alignItems: "center", justifyContent: "center" }, contactName: { fontFamily: "Inter_600SemiBold", fontSize: 14 }, contactMeta: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 4 }, addContact: { minHeight: 48, borderWidth: 1, borderStyle: "dashed", borderRadius: 14, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 }, addContactText: { fontFamily: "Inter_600SemiBold", fontSize: 13 }, modalShade: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(21,36,29,0.42)" }, modalCard: { maxHeight: "88%", borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingTop: 22 }, modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, loadingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, padding: 14 }, loadingText: { fontFamily: "Inter_500Medium", fontSize: 13 }, routeCard: { borderWidth: 1, borderRadius: 17, padding: 14, flexDirection: "row", alignItems: "center", gap: 12 }, routeNumber: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" }, routeTitle: { fontFamily: "Inter_600SemiBold", fontSize: 14 }, routeMeta: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 4 }, pendingText: { fontFamily: "Inter_500Medium", fontSize: 11, marginTop: 8 }, summaryCard: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 15 }, summaryRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14 }, summaryLabel: { fontFamily: "Inter_500Medium", fontSize: 11 }, summaryValue: { fontFamily: "Inter_600SemiBold", fontSize: 13, marginTop: 3 }, activeBadge: { alignSelf: "flex-start", borderRadius: 30, paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 7 }, liveDot: { width: 8, height: 8, borderRadius: 4 }, activeBadgeText: { fontFamily: "Inter_700Bold", fontSize: 12 }, activeStats: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 14 }, stat: { alignItems: "center", flex: 1 }, statValue: { fontFamily: "Inter_700Bold", fontSize: 18 }, statLabel: { fontFamily: "Inter_400Regular", fontSize: 11, marginTop: 3 }, safetyNotice: { borderRadius: 15, padding: 13, flexDirection: "row", gap: 9, alignItems: "center" }, safetyNoticeText: { flex: 1, fontFamily: "Inter_500Medium", fontSize: 12, lineHeight: 17 }, sosButton: { minHeight: 56, borderRadius: 17, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 }, sosText: { fontFamily: "Inter_700Bold", fontSize: 15 }, historyCard: { borderWidth: 1, borderRadius: 17, padding: 15, gap: 7 }, historyHeader: { flexDirection: "row", justifyContent: "space-between" }, historyDate: { fontFamily: "Inter_600SemiBold", fontSize: 13 }, status: { fontFamily: "Inter_700Bold", fontSize: 10, letterSpacing: 0.6 }, historyRoute: { fontFamily: "Inter_600SemiBold", fontSize: 14 }, viewDetailRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingTop: 12, marginTop: 10, borderTopWidth: 1 }, viewDetailText: { fontFamily: "Inter_600SemiBold", fontSize: 13 }, profileHero: { alignItems: "center", padding: 25, borderRadius: 21 }, profileAvatar: { width: 66, height: 66, borderRadius: 22, alignItems: "center", justifyContent: "center" }, profileAvatarText: { fontFamily: "Inter_700Bold", fontSize: 28 }, profileName: { fontFamily: "Inter_700Bold", fontSize: 21, marginTop: 12 }, profileRow: { flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 16, borderBottomWidth: 1 }, profileRowText: { fontFamily: "Inter_500Medium", fontSize: 14 }, emptyState: { alignItems: "center", borderRadius: 18, padding: 28, marginTop: 10 }, emptyTitle: { fontFamily: "Inter_600SemiBold", fontSize: 15, marginTop: 12 }, emptyText: { fontFamily: "Inter_400Regular", fontSize: 13, textAlign: "center", lineHeight: 20, marginTop: 7, maxWidth: 280 },
 });
+
+

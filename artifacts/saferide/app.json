@@ -17,7 +17,15 @@
       "supportsTablet": false
     },
     "android": {
-      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/saferide-icon.png",
+        "backgroundColor": "#f5f8f6"
+      }
     },
     "web": {
       "favicon": "./assets/images/saferide-icon.png"
@@ -30,7 +38,15 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "SafeRide needs your location to track your journey and provide real-time safety monitoring.",
+          "locationAlwaysPermission": "SafeRide needs background location access to monitor your journey even when the app is in the background.",
+          "locationWhenInUsePermission": "SafeRide needs your location to track your journey and provide safety monitoring."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
